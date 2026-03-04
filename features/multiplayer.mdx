@@ -11,37 +11,37 @@ Multiplayer supports several different match formats to suit different playstyle
 
 <Card title="Available Match Types" icon="users">
   <Accordion>
-    <AccordionItem title="Head-to-Head">
+    <Accordion title="Head-to-Head">
       Players compete individually for the highest score. Each player's performance is tracked separately.
       
       ```csharp
       MatchType.HeadToHead
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Team Versus">
+    <Accordion title="Team Versus">
       Players are divided into teams (typically Red vs Blue). Team scores are combined to determine the winner.
       
       ```csharp
       MatchType.TeamVersus
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Matchmaking (Quick Play)">
+    <Accordion title="Matchmaking (Quick Play)">
       Automated matchmaking system that pairs players of similar skill levels.
       
       ```csharp
       MatchType.Matchmaking
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Ranked Play">
+    <Accordion title="Ranked Play">
       Competitive ranked matchmaking with skill-based ratings.
       
       ```csharp
       MatchType.RankedPlay
       ```
-    </AccordionItem>
+    </Accordion>
   </Accordion>
 </Card>
 
@@ -150,7 +150,7 @@ The system tracks whether each player has the required beatmap downloaded. Playe
 Depending on the queue mode, players can manage the playlist:
 
 <Accordion title="Playlist Operations">
-  <AccordionItem title="Add Playlist Item">
+  <Accordion title="Add Playlist Item">
     Add a new beatmap to the room's playlist:
     
     ```csharp
@@ -158,9 +158,9 @@ Depending on the queue mode, players can manage the playlist:
     ```
     
     The item includes the beatmap, required mods, and allowed mods.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Edit Playlist Item">
+  <Accordion title="Edit Playlist Item">
     Modify an existing playlist item:
     
     ```csharp
@@ -168,15 +168,15 @@ Depending on the queue mode, players can manage the playlist:
     ```
     
     The item must have a valid ID to be edited.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Remove Playlist Item">
+  <Accordion title="Remove Playlist Item">
     Remove a beatmap from the playlist:
     
     ```csharp
     Task RemovePlaylistItem(long playlistItemId);
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Match Control
@@ -327,25 +327,25 @@ public class MatchmakingRoomState
 The multiplayer system uses specific exceptions to communicate errors:
 
 <Accordion title="Exception Types">
-  <AccordionItem title="NotHostException">
+  <Accordion title="NotHostException">
     Thrown when a non-host player attempts a host-only operation.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="NotJoinedRoomException">
+  <Accordion title="NotJoinedRoomException">
     Thrown when attempting room operations while not in a room.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="InvalidStateException">
+  <Accordion title="InvalidStateException">
     Thrown when an operation is invalid given the current game/room state.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="InvalidStateChangeException">
+  <Accordion title="InvalidStateChangeException">
     Thrown when a requested state change is not permitted.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="InvalidPasswordException">
+  <Accordion title="InvalidPasswordException">
     Thrown when attempting to join a password-protected room with incorrect password.
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Best Practices

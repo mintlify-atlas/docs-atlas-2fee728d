@@ -23,7 +23,7 @@ public interface ISkin
 ### Skin Resources
 
 <Accordion title="What Skins Can Provide">
-  <AccordionItem title="Visual Components">
+  <Accordion title="Visual Components">
     Drawable UI elements and gameplay components:
     
     ```csharp
@@ -36,9 +36,9 @@ public interface ISkin
     - Score displays
     - Health bars
     - Combo counters
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Textures">
+  <Accordion title="Textures">
     Image assets for various game elements:
     
     ```csharp
@@ -50,9 +50,9 @@ public interface ISkin
     - `sliderb0.png`
     - `cursor.png`
     - `menu-background.jpg`
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Audio Samples">
+  <Accordion title="Audio Samples">
     Sound effects:
     
     ```csharp
@@ -63,9 +63,9 @@ public interface ISkin
     - Hit sounds (normal, whistle, finish, clap)
     - Menu sounds
     - Combo break sound
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Configuration Values">
+  <Accordion title="Configuration Values">
     Skin-specific settings:
     
     ```csharp
@@ -76,7 +76,7 @@ public interface ISkin
     - Colors (combo colors, menu colors)
     - Fonts
     - Layout preferences
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Built-in Skins
@@ -85,7 +85,7 @@ osu! includes several official skins:
 
 <Card title="Default Skins" icon="palette">
   <Accordion>
-    <AccordionItem title="Argon">
+    <Accordion title="Argon">
       Modern default skin with clean visuals.
       
       ```csharp
@@ -100,9 +100,9 @@ osu! includes several official skins:
           };
       }
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Argon Pro">
+    <Accordion title="Argon Pro">
       Professional variant of Argon with refined aesthetics.
       
       ```csharp
@@ -111,17 +111,17 @@ osu! includes several official skins:
           // Enhanced version of Argon
       }
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Triangles">
+    <Accordion title="Triangles">
       Geometric-themed skin.
       
       ```csharp
       ID = SkinInfo.TRIANGLES_SKIN
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Classic">
+    <Accordion title="Classic">
       Traditional osu! skin (osu!stable style).
       
       ```csharp
@@ -130,15 +130,15 @@ osu! includes several official skins:
           ID = SkinInfo.CLASSIC_SKIN
       }
       ```
-    </AccordionItem>
+    </Accordion>
     
-    <AccordionItem title="Retro">
+    <Accordion title="Retro">
       Nostalgic retro-styled skin.
       
       ```csharp
       ID = SkinInfo.RETRO_SKIN
       ```
-    </AccordionItem>
+    </Accordion>
   </Accordion>
 </Card>
 
@@ -215,25 +215,25 @@ public IList<Live<SkinInfo>> GetAllUsableSkins()
 ### Cycling Through Skins
 
 <Accordion title="Skin Navigation">
-  <AccordionItem title="Next Skin">
+  <Accordion title="Next Skin">
     ```csharp
     skinManager.SelectNextSkin();
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Previous Skin">
+  <Accordion title="Previous Skin">
     ```csharp
     skinManager.SelectPreviousSkin();
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Random Skin">
+  <Accordion title="Random Skin">
     ```csharp
     skinManager.SelectRandomSkin();
     ```
     
     Chooses a random skin, excluding the current one.
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Importing Skins
@@ -384,7 +384,7 @@ This fallback system ensures that missing resources in user skins are filled in 
 Skins can provide custom UI components:
 
 <Accordion title="Skinnable Components">
-  <AccordionItem title="Text Elements">
+  <Accordion title="Text Elements">
     ```csharp
     public class TextElement : ISerialisableDrawable
     {
@@ -392,34 +392,34 @@ Skins can provide custom UI components:
         public FontUsage Font { get; set; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Player Name">
+  <Accordion title="Player Name">
     ```csharp
     public class PlayerName : FontAdjustableSkinComponent
     {
         // Displays player username
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Beatmap Attributes">
+  <Accordion title="Beatmap Attributes">
     ```csharp
     public class BeatmapAttributeText : FontAdjustableSkinComponent
     {
         // Displays beatmap info (title, artist, etc.)
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Judgement Counter">
+  <Accordion title="Judgement Counter">
     ```csharp
     public class ArgonJudgementCounter : ISkinComponent
     {
         // Shows hit statistics during gameplay
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Legacy Skin Support

@@ -26,31 +26,31 @@ public partial class Room : INotifyPropertyChanged
 ### Room Properties
 
 <Accordion title="Core Room Properties">
-  <AccordionItem title="Identity">
+  <Accordion title="Identity">
     - **RoomID**: Online identifier (null until created)
     - **Name**: Display name for the room
     - **ChannelId**: Associated chat channel ID
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Access Control">
+  <Accordion title="Access Control">
     - **Password**: Room password (only set during creation)
     - **HasPassword**: Indicates if password is required
     - **Availability**: Who can join (public, friends only, etc.)
     - **Pinned**: Whether the room appears at the top of listings
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Participants">
+  <Accordion title="Participants">
     - **Host**: Room creator/host user
     - **MaxParticipants**: Maximum allowed players
     - **ParticipantCount**: Current number of players
     - **RecentParticipants**: List of recent players
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Timing">
+  <Accordion title="Timing">
     - **StartDate**: When the room was created
     - **EndDate**: When the room will close
     - **Duration**: How long the room stays open
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 <Note>
@@ -135,7 +135,7 @@ Limiting attempts adds a challenge element to playlist rooms.
 ### Multiplayer-Specific Settings
 
 <Accordion title="Multiplayer Room Settings">
-  <AccordionItem title="Queue Mode">
+  <Accordion title="Queue Mode">
     Controls who can add songs to the playlist:
     
     ```csharp
@@ -145,9 +145,9 @@ Limiting attempts adds a challenge element to playlist rooms.
     - Host Only
     - All Players
     - All Players (Round Robin)
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Auto-Start">
+  <Accordion title="Auto-Start">
     Automatically start matches after a delay:
     
     ```csharp
@@ -155,15 +155,15 @@ Limiting attempts adds a challenge element to playlist rooms.
     ```
     
     Set to zero to disable auto-start.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Auto-Skip">
+  <Accordion title="Auto-Skip">
     Automatically skip beatmap intros:
     
     ```csharp
     public bool AutoSkip { get; set; }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Creating and Managing Rooms
@@ -279,15 +279,15 @@ var scoresRequest = new IndexPlaylistScoresRequest(
 ### Score Retrieval
 
 <Accordion title="Score Query Methods">
-  <AccordionItem title="Show Playlist Score">
+  <Accordion title="Show Playlist Score">
     Retrieve a specific score by ID:
     
     ```csharp
     var scoreRequest = new ShowPlaylistScoreRequest(roomId, playlistId, scoreId);
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Show User Score">
+  <Accordion title="Show User Score">
     Get the current user's score on a playlist item:
     
     ```csharp
@@ -297,9 +297,9 @@ var scoresRequest = new IndexPlaylistScoresRequest(
         userId
     );
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Scores Around User">
+  <Accordion title="Scores Around User">
     Retrieve scores near the user's ranking:
     
     ```csharp
@@ -309,7 +309,7 @@ var scoresRequest = new IndexPlaylistScoresRequest(
         public MultiplayerScores Lower { get; set; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## User Score Tracking

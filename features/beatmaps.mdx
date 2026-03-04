@@ -41,42 +41,42 @@ public class BeatmapInfo : RealmObject
 Each beatmap has configurable difficulty parameters that affect gameplay:
 
 <Accordion title="Difficulty Parameters">
-  <AccordionItem title="Drain Rate (HP)">
+  <Accordion title="Drain Rate (HP)">
     Controls how quickly health depletes and how much health is recovered from hits. Default value is 5.
     
     ```csharp
     public float DrainRate { get; set; } = 5;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Circle Size (CS)">
+  <Accordion title="Circle Size (CS)">
     Determines the size of hit objects. Higher values mean smaller circles. Default value is 5.
     
     ```csharp
     public float CircleSize { get; set; } = 5;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Overall Difficulty (OD)">
+  <Accordion title="Overall Difficulty (OD)">
     Affects the timing window for hitting objects accurately. Default value is 5.
     
     ```csharp
     public float OverallDifficulty { get; set; } = 5;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Approach Rate (AR)">
+  <Accordion title="Approach Rate (AR)">
     Controls how long hit objects are visible before they need to be hit. Default value is 5.
     
     ```csharp
     public float ApproachRate { get; set; } = 5;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Slider Settings">
+  <Accordion title="Slider Settings">
     - **SliderMultiplier**: Base slider velocity (default 1.4)
     - **SliderTickRate**: Frequency of slider ticks (default 1)
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Beatmap Status
@@ -153,7 +153,7 @@ public WorkingBeatmap CreateNew(RulesetInfo ruleset, APIUser user)
 You can add new difficulties to existing beatmap sets in two ways:
 
 <Accordion title="Difficulty Creation Methods">
-  <AccordionItem title="CreateNewDifficulty">
+  <Accordion title="CreateNewDifficulty">
     Creates a fresh difficulty with default settings but preserves metadata and timing points from a reference beatmap.
     
     ```csharp
@@ -164,9 +164,9 @@ You can add new difficulties to existing beatmap sets in two ways:
     ```
     
     This method is useful when starting a new difficulty from scratch while keeping the song's timing.
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="CopyExistingDifficulty">
+  <Accordion title="CopyExistingDifficulty">
     Creates a nearly-exact copy of an existing difficulty, including all hit objects and settings.
     
     ```csharp
@@ -176,7 +176,7 @@ You can add new difficulties to existing beatmap sets in two ways:
     ```
     
     The copy gets a new ID and "(copy)" suffix added to its difficulty name.
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ### Hiding and Restoring Difficulties

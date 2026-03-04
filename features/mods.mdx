@@ -23,7 +23,7 @@ public abstract class Mod : IMod, IEquatable<Mod>, IDeepCloneable<Mod>
 ### Core Mod Properties
 
 <Accordion title="Mod Metadata">
-  <AccordionItem title="Identity">
+  <Accordion title="Identity">
     - **Name**: Full mod name (e.g., "Hard Rock")
     - **Acronym**: Short abbreviation (e.g., "HR")
     - **Description**: What the mod does
@@ -34,9 +34,9 @@ public abstract class Mod : IMod, IEquatable<Mod>, IDeepCloneable<Mod>
     public abstract string Acronym { get; }
     public virtual IconUsage? Icon => null;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Gameplay Impact">
+  <Accordion title="Gameplay Impact">
     - **ScoreMultiplier**: How the mod affects score (e.g., 1.06 for +6%)
     - **Type**: Category of the mod (DifficultyIncrease, DifficultyReduction, etc.)
     - **Ranked**: Whether scores with this mod count for ranking
@@ -46,9 +46,9 @@ public abstract class Mod : IMod, IEquatable<Mod>, IDeepCloneable<Mod>
     public virtual ModType Type => ModType.Fun;
     public virtual bool Ranked => false;
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Availability">
+  <Accordion title="Availability">
     - **UserPlayable**: Can users select this mod?
     - **ValidForMultiplayer**: Can be used in multiplayer?
     - **ValidForMultiplayerAsFreeMod**: Available as free mod choice?
@@ -60,7 +60,7 @@ public abstract class Mod : IMod, IEquatable<Mod>, IDeepCloneable<Mod>
     public virtual bool ValidForMultiplayerAsFreeMod => true;
     public virtual bool HasImplementation => this is IApplicableMod;
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Mod Types
@@ -83,7 +83,7 @@ Here are some of the standard mods available:
 ### Difficulty Reduction Mods
 
 <Accordion title="Easy Mods">
-  <AccordionItem title="Easy (EZ)">
+  <Accordion title="Easy (EZ)">
     Reduces overall difficulty:
     - Larger hit objects
     - More lenient timing
@@ -97,15 +97,15 @@ Here are some of the standard mods available:
         public override double ScoreMultiplier => 0.5;
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="No Fail (NF)">
+  <Accordion title="No Fail (NF)">
     Prevents failing - health never reaches zero.
     
     Score multiplier: 0.5x
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Half Time (HT)">
+  <Accordion title="Half Time (HT)">
     Slows down the beatmap to 75% speed.
     
     ```csharp
@@ -115,13 +115,13 @@ Here are some of the standard mods available:
         public override double ScoreMultiplier => 0.3;
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ### Difficulty Increase Mods
 
 <Accordion title="Hard Mods">
-  <AccordionItem title="Hard Rock (HR)">
+  <Accordion title="Hard Rock (HR)">
     Increases difficulty by:
     - Smaller hit objects (higher CS)
     - Stricter timing (higher OD)
@@ -136,15 +136,15 @@ Here are some of the standard mods available:
         public override double ScoreMultiplier => 1.06;
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Hidden (HD)">
+  <Accordion title="Hidden (HD)">
     Hit objects fade out before they need to be hit.
     
     Score multiplier: 1.06x
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Double Time (DT)">
+  <Accordion title="Double Time (DT)">
     Speeds up the beatmap to 150% speed.
     
     ```csharp
@@ -154,26 +154,26 @@ Here are some of the standard mods available:
         public override double ScoreMultiplier => 1.12;
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Flashlight (FL)">
+  <Accordion title="Flashlight (FL)">
     Restricts vision to a small circle around the cursor.
     
     Score multiplier: 1.12x
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ### Special Mods
 
 <Card title="Unique Mechanics" icon="wand-magic-sparkles">
 <Accordion>
-  <AccordionItem title="Autopilot / Relax">
+  <Accordion title="Autopilot / Relax">
     Auto-moves cursor or auto-clicks (depending on mode).
     
     Score multiplier: 0.0x (unranked)
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Cinema">
+  <Accordion title="Cinema">
     Watch a beatmap with background dim disabled.
     
     ```csharp
@@ -182,9 +182,9 @@ Here are some of the standard mods available:
         public override string Acronym => "CN";
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Mirror">
+  <Accordion title="Mirror">
     Flips the playfield horizontally.
     
     ```csharp
@@ -194,7 +194,7 @@ Here are some of the standard mods available:
         public override double ScoreMultiplier => 1.0;
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 </Card>
 
@@ -222,7 +222,7 @@ public virtual IEnumerable<(LocalisableString setting, LocalisableString value)>
 ### Configurable Mods
 
 <Accordion title="Mods with Settings">
-  <AccordionItem title="Difficulty Adjust">
+  <Accordion title="Difficulty Adjust">
     Allows manual adjustment of all difficulty parameters:
     
     ```csharp
@@ -234,9 +234,9 @@ public virtual IEnumerable<(LocalisableString setting, LocalisableString value)>
         public BindableFloat OverallDifficulty { get; set; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Adaptive Speed">
+  <Accordion title="Adaptive Speed">
     Adjusts playback speed based on performance:
     
     ```csharp
@@ -246,9 +246,9 @@ public virtual IEnumerable<(LocalisableString setting, LocalisableString value)>
         public BindableFloat AdjustPitch { get; set; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="Flashlight">
+  <Accordion title="Flashlight">
     Configurable sight radius:
     
     ```csharp
@@ -258,7 +258,7 @@ public virtual IEnumerable<(LocalisableString setting, LocalisableString value)>
         public BindableBool ComboBasedSize { get; set; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ### Setting Management
@@ -303,7 +303,7 @@ Attempting to enable incompatible mods together will result in one being automat
 Mods implement various interfaces to apply their effects:
 
 <Accordion title="Application Interfaces">
-  <AccordionItem title="IApplicableToDifficulty">
+  <Accordion title="IApplicableToDifficulty">
     Modifies difficulty settings:
     
     ```csharp
@@ -313,9 +313,9 @@ Mods implement various interfaces to apply their effects:
         void ApplyToDifficulty(BeatmapDifficulty difficulty);
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="IApplicableToRate">
+  <Accordion title="IApplicableToRate">
     Changes playback rate:
     
     ```csharp
@@ -324,9 +324,9 @@ Mods implement various interfaces to apply their effects:
         BindableNumber<double> SpeedChange { get; }
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="IApplicableToDrawableHitObject">
+  <Accordion title="IApplicableToDrawableHitObject">
     Modifies individual hit objects:
     
     ```csharp
@@ -335,9 +335,9 @@ Mods implement various interfaces to apply their effects:
         void ApplyToDrawableHitObject(DrawableHitObject drawable);
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="IApplicableToScoreProcessor">
+  <Accordion title="IApplicableToScoreProcessor">
     Changes score calculation:
     
     ```csharp
@@ -346,9 +346,9 @@ Mods implement various interfaces to apply their effects:
         void ApplyToScoreProcessor(ScoreProcessor scoreProcessor);
     }
     ```
-  </AccordionItem>
+  </Accordion>
   
-  <AccordionItem title="IApplicableToHealthProcessor">
+  <Accordion title="IApplicableToHealthProcessor">
     Modifies health drain/recovery:
     
     ```csharp
@@ -357,7 +357,7 @@ Mods implement various interfaces to apply their effects:
         void ApplyToHealthProcessor(HealthProcessor healthProcessor);
     }
     ```
-  </AccordionItem>
+  </Accordion>
 </Accordion>
 
 ## Mod Cloning and Copying
