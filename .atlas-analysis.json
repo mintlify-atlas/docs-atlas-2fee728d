@@ -1,0 +1,117 @@
+{
+  "projectType": "saas",
+  "projectName": "osu!",
+  "projectDescription": "A free-to-win rhythm game where rhythm is just a click away.",
+  "theme": "almond",
+  "primaryColor": "#e96ba4",
+  "lightColor": "#424242",
+  "darkColor": "#ecd9e1",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Game Modes",
+            "pages": [
+              "game-modes/overview",
+              "game-modes/osu-standard",
+              "game-modes/taiko",
+              "game-modes/catch",
+              "game-modes/mania"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/beatmaps",
+              "features/multiplayer",
+              "features/online-play",
+              "features/scoring-system",
+              "features/mods",
+              "features/skinning"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/leaderboards",
+              "community/tournaments",
+              "community/chat"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "development/setup",
+              "development/building",
+              "development/architecture"
+            ]
+          },
+          {
+            "group": "Custom Rulesets",
+            "pages": [
+              "development/rulesets/overview",
+              "development/rulesets/creating",
+              "development/rulesets/objects",
+              "development/rulesets/mods",
+              "development/rulesets/difficulty"
+            ]
+          },
+          {
+            "group": "Core Systems",
+            "pages": [
+              "development/systems/beatmap-processing",
+              "development/systems/gameplay",
+              "development/systems/ui-overlays",
+              "development/systems/input-handling"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing/guidelines",
+              "development/contributing/code-style",
+              "development/contributing/testing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Four distinct game modes (osu!standard, Taiko, Catch, Mania)",
+    "Extensive beatmap library and custom beatmap support",
+    "Online multiplayer and competitive gameplay",
+    "Custom ruleset development framework",
+    "Cross-platform support (Windows, macOS, Linux, iOS, Android)",
+    "Advanced modding system for gameplay variations",
+    "Skinning and customization",
+    "Tournament support and spectator mode"
+  ],
+  "publicApiSurface": [
+    "Ruleset - Base class for custom game modes",
+    "Beatmap - Core beatmap data structure",
+    "HitObject - Base class for gameplay objects",
+    "Mod - Game modification system",
+    "DrawableRuleset - Visual representation of gameplay",
+    "OsuGame - Main game instance",
+    "BeatmapConverter - Convert beatmaps between rulesets",
+    "DifficultyCalculator - Calculate star rating",
+    "ScoreProcessor - Handle scoring logic",
+    "PerformanceCalculator - Calculate performance points"
+  ]
+}
