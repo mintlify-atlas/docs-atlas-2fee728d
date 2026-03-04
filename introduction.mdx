@@ -1,0 +1,174 @@
+---
+title: Welcome to osu!
+description: Rhythm is just a click away
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#e96ba4] via-[#d35a8f] to-[#c14979] dark:from-[#e96ba4] dark:via-[#d35a8f] dark:to-[#c14979] py-20">
+  <div className="absolute inset-0 bg-black/20"></div>
+  <div className="relative max-w-6xl mx-auto px-6 text-center">
+    <h1 className="text-5xl md:text-6xl font-bold text-white mb-6">
+      Welcome to osu!
+    </h1>
+    <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto mb-8">
+      A free-to-win rhythm game. Rhythm is just a click away! Play, compete, and create with millions of players worldwide.
+    </p>
+    <div className="flex flex-wrap justify-center gap-4">
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-8 py-3 rounded-full bg-white text-[#e96ba4] font-semibold hover:bg-gray-100 transition-colors"
+      >
+        Get Started
+      </a>
+      <a
+        href="/development/setup"
+        className="inline-flex items-center px-8 py-3 rounded-full border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+      >
+        Start Developing
+      </a>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Get started in minutes
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Jump into the game quickly with our easy installation process
+  </p>
+
+  <Steps>
+    <Step title="Download osu!">
+      Choose your platform and download the latest release. osu! supports Windows, macOS, Linux, iOS, and Android.
+
+      <CardGroup cols={3}>
+        <Card title="Windows" icon="windows" href="https://github.com/ppy/osu/releases/latest/download/install.exe">
+          Windows 10+ (x64)
+        </Card>
+        <Card title="macOS" icon="apple" href="https://github.com/ppy/osu/releases/latest">
+          macOS 12+ (Intel & Apple Silicon)
+        </Card>
+        <Card title="Linux" icon="linux" href="https://github.com/ppy/osu/releases/latest/download/osu.AppImage">
+          Linux x64 AppImage
+        </Card>
+      </CardGroup>
+    </Step>
+
+    <Step title="Install and launch">
+      Run the installer for your platform. On first launch, osu! will guide you through initial setup and configuration.
+
+      <Note>
+        For iOS users: TestFlight access fills up quickly due to Apple's 10,000 user limit. Follow [@ppy](https://twitter.com/ppy) on Twitter for reset announcements.
+      </Note>
+    </Step>
+
+    <Step title="Create your account">
+      Sign up for a free osu! account to save your scores, compete on leaderboards, and play multiplayer.
+    </Step>
+
+    <Step title="Start playing">
+      Browse the beatmap library and start playing! Use the in-game downloader to find songs, or import your own beatmaps.
+
+      ```bash Terminal
+      # You can also download beatmaps from the osu! website
+      https://osu.ppy.sh/beatmapsets
+      ```
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Explore game modes
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Four unique ways to experience rhythm gaming
+  </p>
+
+  <CardGroup cols={2}>
+    <Card title="osu!standard" icon="circle-dot" href="/game-modes/osu-standard">
+      The original mode. Click circles, slide sliders, and spin spinners to the beat.
+    </Card>
+    <Card title="osu!taiko" icon="drum" href="/game-modes/taiko">
+      Inspired by Taiko no Tatsujin. Hit the drum to match the rhythm.
+    </Card>
+    <Card title="osu!catch" icon="apple-whole" href="/game-modes/catch">
+      Catch falling fruits by moving your catcher left and right.
+    </Card>
+    <Card title="osu!mania" icon="music" href="/game-modes/mania">
+      A vertical scrolling rhythm game. Press keys when notes reach the judgment line.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Core features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Everything you need for the ultimate rhythm gaming experience
+  </p>
+
+  <CardGroup cols={3}>
+    <Card title="Beatmaps" icon="map" href="/features/beatmaps">
+      Access thousands of community-created beatmaps across all difficulty levels
+    </Card>
+    <Card title="Multiplayer" icon="users" href="/features/multiplayer">
+      Play with friends in real-time multiplayer lobbies and tournaments
+    </Card>
+    <Card title="Online Play" icon="globe" href="/features/online-play">
+      Compete globally with ranked play, daily challenges, and seasonal events
+    </Card>
+    <Card title="Scoring System" icon="trophy" href="/features/scoring-system">
+      Performance points (PP) system ranks your skills across all game modes
+    </Card>
+    <Card title="Mods" icon="wand-sparkles" href="/features/mods">
+      Customize gameplay with difficulty-increasing and fun modifiers
+    </Card>
+    <Card title="Skinning" icon="palette" href="/features/skinning">
+      Personalize your game with custom skins and UI elements
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    For developers
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Build custom rulesets and contribute to the open-source project
+  </p>
+
+  <CardGroup cols={2}>
+    <Card title="Development Setup" icon="code" href="/development/setup">
+      Set up your development environment and build osu! from source
+    </Card>
+    <Card title="Custom Rulesets" icon="puzzle-piece" href="/development/rulesets/overview">
+      Create your own game modes using the ruleset framework
+    </Card>
+    <Card title="Architecture" icon="sitemap" href="/development/architecture">
+      Understand the core systems and how osu! is built
+    </Card>
+    <Card title="Contributing" icon="code-pull-request" href="/development/contributing/guidelines">
+      Join the community and contribute code, translations, or documentation
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-r from-[#e96ba4] to-[#d35a8f] dark:from-[#e96ba4] dark:to-[#d35a8f] p-8 md:p-12 text-center">
+    <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+      Ready to play?
+    </h2>
+    <p className="text-lg text-white/90 mb-8 max-w-2xl mx-auto">
+      Join millions of players worldwide and experience the rhythm game that's completely free and open source.
+    </p>
+    <a
+      href="/quickstart"
+      className="inline-flex items-center px-8 py-3 rounded-full bg-white text-[#e96ba4] font-semibold hover:bg-gray-100 transition-colors"
+    >
+      Download osu! Now
+    </a>
+  </div>
+</div>

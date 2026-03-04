@@ -1,0 +1,522 @@
+---
+title: Mods System
+description: Game modification system that alters gameplay mechanics and difficulty
+---
+
+Mods (modifiers) are gameplay modifications that change how the game behaves. They can increase difficulty, add fun mechanics, or provide assistance. The mod system is highly extensible and supports custom configurations.
+
+## Mod Base Class
+
+All mods inherit from the `Mod` abstract class:
+
+```csharp
+public abstract class Mod : IMod, IEquatable<Mod>, IDeepCloneable<Mod>
+{
+    public abstract string Name { get; }
+    public abstract string Acronym { get; }
+    public abstract LocalisableString Description { get; }
+    public abstract double ScoreMultiplier { get; }
+    public virtual ModType Type => ModType.Fun;
+}
+```
+
+### Core Mod Properties
+
+<Accordion title="Mod Metadata">
+  <AccordionItem title="Identity">
+    - **Name**: Full mod name (e.g., "Hard Rock")
+    - **Acronym**: Short abbreviation (e.g., "HR")
+    - **Description**: What the mod does
+    - **Icon**: Visual icon for the mod
+    
+    ```csharp
+    public abstract string Name { get; }
+    public abstract string Acronym { get; }
+    public virtual IconUsage? Icon => null;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Gameplay Impact">
+    - **ScoreMultiplier**: How the mod affects score (e.g., 1.06 for +6%)
+    - **Type**: Category of the mod (DifficultyIncrease, DifficultyReduction, etc.)
+    - **Ranked**: Whether scores with this mod count for ranking
+    
+    ```csharp
+    public abstract double ScoreMultiplier { get; }
+    public virtual ModType Type => ModType.Fun;
+    public virtual bool Ranked => false;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Availability">
+    - **UserPlayable**: Can users select this mod?
+    - **ValidForMultiplayer**: Can be used in multiplayer?
+    - **ValidForMultiplayerAsFreeMod**: Available as free mod choice?
+    - **HasImplementation**: Is the mod fully implemented?
+    
+    ```csharp
+    public virtual bool UserPlayable => true;
+    public virtual bool ValidForMultiplayer => true;
+    public virtual bool ValidForMultiplayerAsFreeMod => true;
+    public virtual bool HasImplementation => this is IApplicableMod;
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Mod Types
+
+Mods are categorized by their purpose:
+
+<Card title="Mod Categories" icon="tags">
+- **DifficultyReduction**: Makes the game easier (e.g., Easy, No Fail)
+- **DifficultyIncrease**: Makes the game harder (e.g., Hard Rock, Hidden)
+- **Automation**: Auto-play mods (e.g., Autoplay, Cinema)
+- **Conversion**: Changes game mode mechanics
+- **Fun**: Entertainment mods that don't affect difficulty significantly
+- **System**: Internal system mods
+</Card>
+
+## Common Mods
+
+Here are some of the standard mods available:
+
+### Difficulty Reduction Mods
+
+<Accordion title="Easy Mods">
+  <AccordionItem title="Easy (EZ)">
+    Reduces overall difficulty:
+    - Larger hit objects
+    - More lenient timing
+    - Slower approach rate
+    - Extra lives (in some implementations)
+    
+    ```csharp
+    public class ModEasy : Mod
+    {
+        public override string Acronym => "EZ";
+        public override double ScoreMultiplier => 0.5;
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="No Fail (NF)">
+    Prevents failing - health never reaches zero.
+    
+    Score multiplier: 0.5x
+  </AccordionItem>
+  
+  <AccordionItem title="Half Time (HT)">
+    Slows down the beatmap to 75% speed.
+    
+    ```csharp
+    public class ModHalfTime : ModTimeAdjust
+    {
+        public override string Acronym => "HT";
+        public override double ScoreMultiplier => 0.3;
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+
+### Difficulty Increase Mods
+
+<Accordion title="Hard Mods">
+  <AccordionItem title="Hard Rock (HR)">
+    Increases difficulty by:
+    - Smaller hit objects (higher CS)
+    - Stricter timing (higher OD)
+    - Faster approach (higher AR)
+    - Faster drain (higher HP)
+    - Flips the playfield vertically
+    
+    ```csharp
+    public class ModHardRock : Mod
+    {
+        public override string Acronym => "HR";
+        public override double ScoreMultiplier => 1.06;
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Hidden (HD)">
+    Hit objects fade out before they need to be hit.
+    
+    Score multiplier: 1.06x
+  </AccordionItem>
+  
+  <AccordionItem title="Double Time (DT)">
+    Speeds up the beatmap to 150% speed.
+    
+    ```csharp
+    public class ModDoubleTime : ModTimeAdjust
+    {
+        public override string Acronym => "DT";
+        public override double ScoreMultiplier => 1.12;
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Flashlight (FL)">
+    Restricts vision to a small circle around the cursor.
+    
+    Score multiplier: 1.12x
+  </AccordionItem>
+</Accordion>
+
+### Special Mods
+
+<Card title="Unique Mechanics" icon="wand-magic-sparkles">
+<Accordion>
+  <AccordionItem title="Autopilot / Relax">
+    Auto-moves cursor or auto-clicks (depending on mode).
+    
+    Score multiplier: 0.0x (unranked)
+  </AccordionItem>
+  
+  <AccordionItem title="Cinema">
+    Watch a beatmap with background dim disabled.
+    
+    ```csharp
+    public class ModCinema : ModAutoplay
+    {
+        public override string Acronym => "CN";
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Mirror">
+    Flips the playfield horizontally.
+    
+    ```csharp
+    public class ModMirror : Mod
+    {
+        public override string Acronym => "MR";
+        public override double ScoreMultiplier => 1.0;
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+</Card>
+
+## Mod Settings
+
+Many mods have configurable settings:
+
+```csharp
+public virtual IEnumerable<(LocalisableString setting, LocalisableString value)> SettingDescription
+{
+    get
+    {
+        foreach ((SettingSourceAttribute attr, PropertyInfo property) in this.GetOrderedSettingsSourceProperties())
+        {
+            var bindable = (IBindable)property.GetValue(this)!;
+            if (bindable.IsDefault)
+                continue;
+                
+            yield return (attr.Label, GetSettingTooltipText(bindable));
+        }
+    }
+}
+```
+
+### Configurable Mods
+
+<Accordion title="Mods with Settings">
+  <AccordionItem title="Difficulty Adjust">
+    Allows manual adjustment of all difficulty parameters:
+    
+    ```csharp
+    public class ModDifficultyAdjust : Mod
+    {
+        public BindableFloat DrainRate { get; set; }
+        public BindableFloat CircleSize { get; set; }
+        public BindableFloat ApproachRate { get; set; }
+        public BindableFloat OverallDifficulty { get; set; }
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Adaptive Speed">
+    Adjusts playback speed based on performance:
+    
+    ```csharp
+    public class ModAdaptiveSpeed : Mod
+    {
+        public BindableFloat InitialRate { get; set; }
+        public BindableFloat AdjustPitch { get; set; }
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Flashlight">
+    Configurable sight radius:
+    
+    ```csharp
+    public class ModFlashlight : Mod
+    {
+        public BindableFloat SizeMultiplier { get; set; }
+        public BindableBool ComboBasedSize { get; set; }
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+
+### Setting Management
+
+<Card title="Settings API">
+```csharp
+// Check if mod uses default settings
+public virtual bool UsesDefaultConfiguration => 
+    SettingsBindables.All(s => s.IsDefault);
+
+// Reset all settings to defaults
+public virtual void ResetSettingsToDefaults() => 
+    CopyFrom((Mod)Activator.CreateInstance(GetType())!);
+
+// Access all settings
+internal IEnumerable<IBindable> SettingsBindables => 
+    SettingsMap.OrderBy(pair => pair.Key).Select(pair => pair.Value);
+```
+</Card>
+
+## Mod Compatibility
+
+Mods can specify incompatibilities:
+
+```csharp
+public virtual Type[] IncompatibleMods => Array.Empty<Type>();
+```
+
+<Card title="Incompatibility Examples">
+- **Easy** is incompatible with **Hard Rock**
+- **Double Time** is incompatible with **Half Time**
+- **No Fail** is incompatible with **Perfect**
+- **Autoplay** is incompatible with **Relax**
+</Card>
+
+<Warning>
+Attempting to enable incompatible mods together will result in one being automatically disabled.
+</Warning>
+
+## Mod Application Interfaces
+
+Mods implement various interfaces to apply their effects:
+
+<Accordion title="Application Interfaces">
+  <AccordionItem title="IApplicableToDifficulty">
+    Modifies difficulty settings:
+    
+    ```csharp
+    public interface IApplicableToDifficulty : IApplicableMod
+    {
+        void ReadFromDifficulty(IBeatmapDifficultyInfo difficulty);
+        void ApplyToDifficulty(BeatmapDifficulty difficulty);
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="IApplicableToRate">
+    Changes playback rate:
+    
+    ```csharp
+    public interface IApplicableToRate : IApplicableMod
+    {
+        BindableNumber<double> SpeedChange { get; }
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="IApplicableToDrawableHitObject">
+    Modifies individual hit objects:
+    
+    ```csharp
+    public interface IApplicableToDrawableHitObject : IApplicableMod
+    {
+        void ApplyToDrawableHitObject(DrawableHitObject drawable);
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="IApplicableToScoreProcessor">
+    Changes score calculation:
+    
+    ```csharp
+    public interface IApplicableToScoreProcessor : IApplicableMod
+    {
+        void ApplyToScoreProcessor(ScoreProcessor scoreProcessor);
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="IApplicableToHealthProcessor">
+    Modifies health drain/recovery:
+    
+    ```csharp
+    public interface IApplicableToHealthProcessor : IApplicableMod
+    {
+        void ApplyToHealthProcessor(HealthProcessor healthProcessor);
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Mod Cloning and Copying
+
+Mods can be cloned and have settings copied:
+
+```csharp
+public virtual Mod DeepClone()
+{
+    var result = (Mod)Activator.CreateInstance(GetType())!;
+    result.CopyFrom(this);
+    return result;
+}
+
+public void CopyFrom(Mod source)
+{
+    if (source.GetType() != GetType())
+        throw new ArgumentException($"Expected mod of type {GetType()}, got {source.GetType()}.");
+
+    foreach (var (_, property) in this.GetSettingsSourceProperties())
+    {
+        var targetBindable = (IBindable)property.GetValue(this)!;
+        var sourceBindable = (IBindable)property.GetValue(source)!;
+        CopyAdjustedSetting(targetBindable, sourceBindable);
+    }
+}
+```
+
+<Note>
+Copying common settings across mods allows preserving user preferences when switching rulesets:
+
+```csharp
+public void CopyCommonSettingsFrom(Mod source)
+{
+    // Only copies settings that exist in both mods
+}
+```
+</Note>
+
+## Mod Equality
+
+Mods are equal if they're the same type with the same settings:
+
+```csharp
+public bool Equals(Mod? other)
+{
+    if (ReferenceEquals(null, other)) return false;
+    if (ReferenceEquals(this, other)) return true;
+
+    return GetType() == other.GetType() &&
+           SettingsBindables.SequenceEqual(other.SettingsBindables, 
+                                          ModSettingsEqualityComparer.Default);
+}
+```
+
+## Special Mod Features
+
+### Accuracy Challenge
+
+<Card title="ModAccuracyChallenge">
+Fails the play if accuracy drops below a threshold:
+
+```csharp
+public class ModAccuracyChallenge : ModFailCondition
+{
+    public BindableNumber<double> MinimumAccuracy { get; set; }
+}
+```
+</Card>
+
+### Barrel Roll
+
+<Card title="ModBarrelRoll">
+Rotates the entire playfield:
+
+```csharp
+public class ModBarrelRoll : Mod
+{
+    public BindableNumber<float> SpinSpeed { get; set; }
+    public BindableNumber<int> Direction { get; set; }
+}
+```
+</Card>
+
+### Muted
+
+<Card title="ModMuted">
+Mutes hit sounds and/or music:
+
+```csharp
+public class ModMuted : Mod, IApplicableToAudio
+{
+    public BindableBool MuteHitSounds { get; set; }
+    public BindableBool MuteMusic { get; set; }
+}
+```
+</Card>
+
+## Mod in Multiplayer
+
+Mods can be:
+- **Required**: All players must use them
+- **Allowed**: Players can optionally enable them
+- **Free Mods**: Players choose their own mods
+
+```csharp
+public virtual bool ValidForMultiplayer => true;
+public virtual bool ValidForMultiplayerAsFreeMod => true;
+```
+
+<Warning>
+Some mods are not valid for multiplayer competitive play:
+- Autoplay
+- Cinema  
+- Relax
+- Any mod with `ValidForMultiplayer = false`
+</Warning>
+
+## Creating Custom Mods
+
+To create a custom mod:
+
+<Steps>
+  <Step title="Inherit from Mod">
+    ```csharp
+    public class MyCustomMod : Mod
+    {
+        public override string Name => "My Mod";
+        public override string Acronym => "MM";
+        public override LocalisableString Description => "Does something cool";
+        public override double ScoreMultiplier => 1.0;
+    }
+    ```
+  </Step>
+  
+  <Step title="Implement Application Interfaces">
+    Add interfaces for what the mod affects:
+    
+    ```csharp
+    public class MyCustomMod : Mod, IApplicableToDrawableHitObject
+    {
+        public void ApplyToDrawableHitObject(DrawableHitObject drawable)
+        {
+            // Modify hit object behavior
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Add Settings (Optional)">
+    ```csharp
+    [SettingSource("Setting Name", "Description")]
+    public BindableInt MySetting { get; } = new BindableInt
+    {
+        Default = 5,
+        Value = 5,
+        MinValue = 1,
+        MaxValue = 10
+    };
+    ```
+  </Step>
+</Steps>

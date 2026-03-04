@@ -1,0 +1,246 @@
+---
+title: Tournament System
+description: Tournament management, bracket systems, and spectator features in osu!
+---
+
+The osu! tournament client provides comprehensive tools for running competitive tournaments, including bracket management, match tracking, team coordination, and live spectating.
+
+## Overview
+
+The tournament system (`osu.Game.Tournament`) is a specialized application for tournament organizers that provides:
+
+- Visual tournament bracket management (ladder system)
+- Real-time match score tracking
+- Team and player management
+- Beatmap pool selection interface
+- Spectator mode with chroma key support
+- IPC integration with osu! stable for live gameplay data
+
+<Info>
+The tournament client runs separately from the main osu! game and is designed for streaming and broadcasting tournament matches.
+</Info>
+
+## Tournament Structure
+
+### Teams
+
+Teams are the core competitive units in tournaments:
+
+<Card title="Team Components" icon="users">
+- **Full Name** - Complete team name
+- **Acronym** - Short 3-letter identifier (auto-generated from name)
+- **Flag** - Country/region flag representation
+- **Players** - List of team members with rankings
+- **Seeding Results** - Performance in seeding rounds
+- **Average Rank** - Calculated from player rankings
+- **Last Year Placing** - Previous tournament performance
+</Card>
+
+Implemented in `osu.Game.Tournament/Models/TournamentTeam.cs:16`
+
+### Matches
+
+Tournament matches track head-to-head competition between two teams:
+
+```csharp
+// Key match properties
+public Bindable<TournamentTeam?> Team1
+public Bindable<TournamentTeam?> Team2
+public Bindable<int?> Team1Score
+public Bindable<int?> Team2Score
+public Bindable<bool> Completed
+public ObservableCollection<BeatmapChoice> PicksBans
+public Bindable<TournamentRound?> Round
+public Bindable<DateTimeOffset> Date
+```
+
+<Tip>
+Matches automatically track winners and losers, with support for both winners and losers bracket progression.
+</Tip>
+
+### Match Operations
+
+Implemented in `osu.Game.Tournament/Models/TournamentMatch.cs:18`:
+
+- **StartMatch()** - Initialize match with zeroed scores
+- **CancelMatchStart()** - Remove scores (false start recovery)
+- **Reset()** - Clear all match data
+- **PointsToWin** - Calculated from round's best-of value
+- **Winner / Loser** - Automatically determined from scores
+
+## Ladder System
+
+The ladder screen provides visual bracket management:
+
+<Card title="Ladder Features" icon="sitemap">
+- Drag-and-drop match positioning
+- Automatic progression path visualization
+- Winners and losers bracket support
+- Round labeling and organization
+- Match ID auto-assignment
+- Conditional match support
+</Card>
+
+Implemented in `osu.Game.Tournament/Screens/Ladder/LadderScreen.cs:21`
+
+### Progression Paths
+
+Matches can define progression to subsequent rounds:
+- **Progression** - Where the winner advances
+- **LosersProgression** - Where the loser advances (double elimination)
+- Visual paths drawn between connected matches
+- Color-coded paths (blue for winners, gold for losers)
+
+## Gameplay Screen
+
+The gameplay screen is designed for streaming live tournament matches:
+
+### Features
+
+<Card title="Streaming Setup" icon="video">
+- **Chroma Key Support** - Green screen areas for OBS integration
+- **Configurable Width** - Adjustable chroma key width
+- **Player Count** - Support for 1v1, 2v2, 3v3, 4v4 formats
+- **Match Header** - Team names and current beatmap
+- **Score Display** - Live score tracking during gameplay
+- **Warmup Mode** - Toggle for non-scoring warm-up matches
+- **Chat Integration** - Tournament match chat display
+</Card>
+
+Implemented in `osu.Game.Tournament/Screens/Gameplay/GameplayScreen.cs:22`
+
+### Chroma Key Areas
+
+The gameplay screen includes configurable green screen regions for compositing:
+
+```csharp
+// Chroma color for keying
+Colour = new Color4(0, 255, 0, 255);
+
+// Adjustable width via settings
+LadderInfo.ChromaKeyWidth.BindValueChanged(width => chroma.Width = width.NewValue);
+```
+
+<Info>
+Chroma key areas automatically adjust layout based on the number of players per team (1v1, 2v2, 3v3, etc.).
+</Info>
+
+## IPC Integration
+
+The tournament client communicates with osu! stable via file-based IPC:
+
+### IPC Files
+
+Implemented in `osu.Game.Tournament/IPC/FileBasedIPC.cs:22`:
+
+- **ipc.txt** - Current beatmap ID and active mods
+- **ipc-state.txt** - Game state (Idle, Playing, Ranking)
+- **ipc-scores.txt** - Live score data for both teams
+- **ipc-channel.txt** - Current chat channel
+
+### Tournament States
+
+- **Idle** - Waiting in song select or menus
+- **Playing** - Active gameplay in progress
+- **Ranking** - Results screen after map completion
+
+### Auto-Detection
+
+The IPC system attempts to auto-detect the osu! stable installation:
+
+1. Environment variable (`OSU_STABLE_PATH`)
+2. Windows Registry entries
+3. `%LOCALAPPDATA%\osu!`
+4. User profile `.osu` folder
+
+<Tip>
+Tournament organizers can manually set the stable path if auto-detection fails.
+</Tip>
+
+## Tournament Screens
+
+The tournament client includes multiple screens for different purposes:
+
+### Screen Types
+
+<Card title="Available Screens" icon="desktop">
+- **Ladder** - Visual bracket editor and viewer
+- **Team Intro** - Team presentation with player rosters
+- **Seeding** - Seeding round results
+- **Schedule** - Match schedule display
+- **Map Pool** - Beatmap selection interface
+- **Gameplay** - Live match view with scores
+- **Team Win** - Victory celebration screen
+- **Showcase** - General tournament information
+- **Drawings** - Group stage team drawings
+</Card>
+
+### Screen Editors
+
+The system includes editor screens for tournament setup:
+
+- **Team Editor** - Create and manage teams
+- **Round Editor** - Configure tournament rounds
+- **Seeding Editor** - Input seeding results
+- **Ladder Editor** - Design bracket structure
+
+## Beatmap Management
+
+Tournaments use beatmap pools organized by rounds:
+
+<Card title="Beatmap Pool Features" icon="music">
+- Round-specific beatmap selections
+- Pick/ban tracking system
+- Beatmap choice recording (pick, ban, tiebreaker)
+- Mod category organization
+- Visual beatmap panels with metadata
+</Card>
+
+### Pick/Ban System
+
+Matches track beatmap selections:
+
+```csharp
+public ObservableCollection<BeatmapChoice> PicksBans
+```
+
+Each choice records:
+- Team that made the selection
+- Beatmap chosen
+- Choice type (Pick, Ban, Tiebreaker)
+
+## Multiplayer Integration
+
+The tournament system integrates with osu!'s multiplayer infrastructure:
+
+- Real-time score updates via IPC
+- Automatic score progression after map completion
+- Match completion detection
+- Auto-progression to next screen when enabled
+
+<Info>
+When auto-progression is enabled, the client automatically moves from gameplay → results → map pool → team win screens based on match state.
+</Info>
+
+## Tournament Chat
+
+Implemented via `TournamentMatchChatDisplay`:
+
+- Live chat display during matches
+- Expandable/collapsible interface
+- Integration with tournament state
+- Automatic show/hide based on gameplay state
+
+## Storage and Persistence
+
+Tournament data is stored in JSON format:
+
+- Team rosters and player information
+- Match brackets and progression
+- Round configurations
+- Seeding results
+- Tournament settings and preferences
+
+<Tip>
+All tournament data auto-saves, with a visual indicator when unsaved changes exist.
+</Tip>

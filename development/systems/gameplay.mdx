@@ -1,0 +1,400 @@
+---
+title: Gameplay System
+description: Core gameplay loop, player management, and game state handling in osu!
+---
+
+The gameplay system orchestrates the entire play session from loading to completion. It manages the ruleset, scoring, health, input handling, and all visual/audio elements during gameplay.
+
+## Core Architecture
+
+### Player Class
+
+The `Player` class is the central component that brings together all gameplay systems.
+
+**Location**: `osu.Game/Screens/Play/Player.cs:46`
+
+<Card title="Player Responsibilities" icon="gamepad">
+  - Initialize DrawableRuleset for the selected game mode
+  - Manage gameplay clock and frame stability
+  - Handle pause/resume/restart operations
+  - Track score and health
+  - Coordinate HUD and overlays
+  - Manage replay recording/playback
+  - Handle gameplay completion and results
+</Card>
+
+#### Key Components
+
+```csharp
+public abstract partial class Player : ScreenWithBeatmapBackground
+{
+    // Core gameplay components
+    protected DrawableRuleset DrawableRuleset { get; private set; }
+    protected ScoreProcessor ScoreProcessor { get; private set; }
+    protected HealthProcessor HealthProcessor { get; private set; }
+    protected HUDOverlay HUDOverlay { get; private set; }
+    protected GameplayClockContainer GameplayClockContainer { get; private set; }
+    
+    // Gameplay state
+    public GameplayState GameplayState { get; private set; }
+    public Score Score { get; private set; }
+    
+    // Configuration
+    public readonly PlayerConfiguration Configuration;
+    
+    // Events
+    public event Action OnGameplayStarted;
+    public event Action OnShowingResults;
+}
+```
+
+### Initialization Flow
+
+The Player initialization follows a specific sequence (line 226):
+
+```csharp
+[BackgroundDependencyLoader]
+private void load(OsuConfigManager config, OsuGameBase game, CancellationToken cancellationToken)
+{
+    // 1. Clone mods for this gameplay session
+    var gameplayMods = Mods.Value.Select(m => m.DeepClone()).ToArray();
+    
+    // 2. Get playable beatmap with mods applied
+    IBeatmap playableBeatmap = loadPlayableBeatmap(gameplayMods, cancellationToken);
+    
+    // 3. Create the drawable ruleset (game-mode specific visualization)
+    DrawableRuleset = ruleset.CreateDrawableRulesetWith(playableBeatmap, gameplayMods);
+    dependencies.CacheAs(DrawableRuleset);
+    
+    // 4. Create score and health processors
+    ScoreProcessor = ruleset.CreateScoreProcessor();
+    ScoreProcessor.ApplyBeatmap(playableBeatmap);
+    
+    HealthProcessor = ruleset.CreateHealthProcessor(playableBeatmap.HitObjects[0].StartTime);
+    HealthProcessor.ApplyBeatmap(playableBeatmap);
+    
+    // 5. Create gameplay clock container (handles time and frame stability)
+    GameplayClockContainer = CreateGameplayClockContainer(Beatmap.Value, DrawableRuleset.GameplayStartTime);
+    
+    // 6. Create score object
+    Score = CreateScore(playableBeatmap);
+    
+    // 7. Create gameplay state (shared state object)
+    GameplayState = new GameplayState(
+        playableBeatmap, ruleset, gameplayMods, 
+        Score, ScoreProcessor, HealthProcessor, 
+        Beatmap.Value.Storyboard, PlayingState
+    );
+}
+```
+
+<Info>
+  Mods are **deep cloned** at the start of gameplay to ensure they don't affect the global state or other concurrent gameplay sessions.
+</Info>
+
+### DrawableRuleset
+
+The `DrawableRuleset` is the game-mode specific component that renders and manages hit objects.
+
+**Location**: `osu.Game/Rulesets/UI/DrawableRuleset.cs:43`
+
+```csharp
+public abstract partial class DrawableRuleset<TObject> : DrawableRuleset
+    where TObject : HitObject
+{
+    // The playfield where hit objects are displayed
+    public override Playfield Playfield { get; }
+    
+    // The converted beatmap
+    public readonly Beatmap<TObject> Beatmap;
+    
+    // Applied mods
+    public sealed override IReadOnlyList<Mod> Mods { get; }
+    
+    // Frame stability for consistent gameplay
+    public override IFrameStableClock FrameStableClock { get; }
+    
+    // Hit object collection
+    public override IEnumerable<HitObject> Objects => Beatmap.HitObjects;
+    
+    // Events for judgements
+    public override event Action<JudgementResult> NewResult;
+    public override event Action<JudgementResult> RevertResult;
+}
+```
+
+**Hierarchy:**
+```
+DrawableRuleset
+└── FrameStabilityContainer
+    └── AudioContainer
+        └── KeyBindingInputManager
+            └── PlayfieldAdjustmentContainer
+                └── Playfield
+                    └── HitObjectContainer
+                        └── DrawableHitObjects
+```
+
+## GameplayState
+
+The `GameplayState` class encapsulates all state information for a gameplay session.
+
+**Location**: `osu.Game/Screens/Play/GameplayState.cs:20`
+
+```csharp
+public class GameplayState
+{
+    // The final beatmap after conversion and mods
+    public readonly IBeatmap Beatmap;
+    
+    // Active ruleset
+    public readonly Ruleset Ruleset;
+    
+    // Applied mods
+    public readonly IReadOnlyList<Mod> Mods;
+    
+    // Score tracking
+    public readonly Score Score;
+    public readonly ScoreProcessor ScoreProcessor;
+    public readonly HealthProcessor HealthProcessor;
+    
+    // Visual elements
+    public readonly Storyboard Storyboard;
+    
+    // Completion state
+    public bool HasPassed { get; set; }
+    public bool HasFailed { get; set; }
+    public bool HasQuit { get; set; }
+    public bool HasCompleted => HasPassed || HasFailed || HasQuit;
+    
+    // Last judgement tracking
+    public IBindable<JudgementResult> LastJudgementResult { get; }
+    
+    // Playing state (playing, paused, watching)
+    public IBindable<LocalUserPlayingState> PlayingState { get; }
+}
+```
+
+<Card title="GameplayState Usage" icon="info">
+  GameplayState is cached in the dependency container, making it accessible to all child components (HUD elements, mods, etc.) without explicit passing.
+</Card>
+
+## Gameplay Loop
+
+The gameplay loop runs through several phases:
+
+### 1. Loading Phase
+- `PlayerLoader` displays loading screen
+- Player initializes all components
+- Resources load asynchronously
+- Mods apply their initial effects
+
+### 2. Intro Phase
+- Storyboard intro plays
+- Skip button available
+- Clock starts at gameplay start time (usually -2000ms)
+
+### 3. Active Gameplay
+- Hit objects spawn and animate
+- Input processed by KeyBindingInputManager
+- Judgements evaluated on hit object interaction
+- Score and health updated continuously
+- HUD displays current state
+
+### 4. Break Periods
+- BreakOverlay displays break information
+- "Passing" or "Failing" indicator shown
+- Audio may dim or continue
+
+### 5. Completion
+- Final hit object judged
+- Outro animation
+- Skip button for outro
+- Delay before results (RESULTS_DISPLAY_DELAY = 1000ms)
+
+### 6. Results
+- Player pushed to results screen
+- Score submitted (if applicable)
+- Replay saved
+
+## Scoring System
+
+### ScoreProcessor
+
+Handles score calculation and combo tracking.
+
+```csharp
+public class ScoreProcessor
+{
+    // Current score values
+    public BindableLong TotalScore { get; }
+    public BindableDouble Accuracy { get; }
+    public BindableInt Combo { get; }
+    public BindableInt HighestCombo { get; }
+    
+    // Judgement tracking
+    public IReadOnlyDictionary<HitResult, int> Statistics { get; }
+    
+    // Apply judgement result
+    public void ApplyResult(JudgementResult result);
+    
+    // Revert judgement (for replay seeking)
+    public void RevertResult(JudgementResult result);
+    
+    // Populate score info
+    public void PopulateScore(ScoreInfo score);
+}
+```
+
+**Score Calculation:**
+1. Each hit object has a maximum score value
+2. Judgements apply a multiplier based on accuracy
+3. Combo multiplier increases score
+4. Bonus objects add extra points
+5. Final score normalized and scaled
+
+### HealthProcessor
+
+Manages player health and fail conditions.
+
+```csharp
+public class HealthProcessor
+{
+    // Current health (0.0 - 1.0)
+    public BindableDouble Health { get; }
+    
+    // Fail state
+    public bool HasFailed { get; }
+    
+    // Apply health change from judgement
+    public void ApplyResult(JudgementResult result);
+}
+```
+
+<Warning>
+  Health changes are **not** synchronized in multiplayer. Each client tracks their own health independently.
+</Warning>
+
+## Clock Management
+
+### GameplayClockContainer
+
+Manages the gameplay clock and audio synchronization.
+
+**Features:**
+- Adjustable playback rate (for mods like DoubleTime)
+- Offset adjustment for audio sync
+- Pause/resume functionality
+- Seek support (for replays)
+
+### Frame Stability
+
+Ensures consistent gameplay regardless of frame rate:
+
+```csharp
+public class FrameStabilityContainer : Container
+{
+    // Provides stable clock for gameplay
+    public IFrameStableClock FrameStableClock { get; }
+    
+    // Enable/disable frame stability
+    public bool FrameStablePlayback { get; set; }
+}
+```
+
+**How it works:**
+- Buffers input events
+- Interpolates between frames
+- Ensures hit objects process at exact times
+- Critical for consistent gameplay across different hardware
+
+## Pause and Resume
+
+```csharp
+// Pause gameplay
+public void Pause()
+{
+    if (!CanPause) return;
+    
+    GameplayClockContainer.Stop();
+    PauseOverlay.Show();
+    localUserPlaying.Value = false;
+}
+
+// Resume gameplay
+public void Resume()
+{
+    // Show resume overlay (countdown)
+    ResumeOverlay.Show();
+    
+    // Resume after countdown completes
+    GameplayClockContainer.Start();
+    localUserPlaying.Value = true;
+}
+```
+
+**Pause Restrictions:**
+- Cannot pause during fail animation
+- Some mods prevent pausing
+- Multiplayer has special pause rules
+
+## Player Variants
+
+osu! has several Player subclasses for different scenarios:
+
+<Card title="Player Types" icon="users">
+  - **SoloPlayer**: Standard single-player gameplay
+  - **ReplayPlayer**: Watches a replay
+  - **SpectatorPlayer**: Watches another player live
+  - **SubmittingPlayer**: Submits scores to server (base for solo)
+  - **RoomSubmittingPlayer**: Multiplayer room gameplay
+</Card>
+
+## Example: Custom Player Implementation
+
+```csharp
+public class MyCustomPlayer : SoloPlayer
+{
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+        
+        // Subscribe to score changes
+        ScoreProcessor.TotalScore.ValueChanged += e => 
+            Console.WriteLine($"Score: {e.NewValue}");
+        
+        // Subscribe to judgements
+        ScoreProcessor.NewJudgement += result => 
+            Console.WriteLine($"Hit: {result.Type}");
+        
+        // Subscribe to health changes
+        HealthProcessor.Health.ValueChanged += e => 
+            Console.WriteLine($"Health: {e.NewValue:P0}");
+    }
+    
+    protected override bool CheckModsAllowFailure()
+    {
+        // Custom fail logic
+        return base.CheckModsAllowFailure();
+    }
+}
+```
+
+## Performance Considerations
+
+<Card title="Optimization Strategies" icon="zap">
+  - **Frame Stability**: Decouples rendering from gameplay logic
+  - **Object Pooling**: Reuses DrawableHitObjects
+  - **Lazy Loading**: Components load only when needed
+  - **Async Operations**: Loading doesn't block the main thread
+  - **Culling**: Off-screen objects skip expensive operations
+</Card>
+
+## Related Systems
+
+- [HUD and Overlays](/development/systems/ui-overlays)
+- [Input Handling](/development/systems/input-handling)
+- [Beatmap Processing](/development/systems/beatmap-processing)
+- Mod System
+- Replay System
+- Score Submission

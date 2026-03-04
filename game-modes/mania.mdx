@@ -1,0 +1,460 @@
+---
+title: osu!mania
+description: A vertical scrolling rhythm game mode with multiple key configurations
+---
+
+osu!mania is a vertical scrolling rhythm game mode (VSRG) where notes fall down columns and players press corresponding keys when notes reach the judgement line. The mode supports 1-18 keys across single or dual stages.
+
+## Hit Objects
+
+osu!mania has two types of hit objects, all defined in `osu.Game.Rulesets.Mania/Objects/`:
+
+<CardGroup cols={2}>
+  <Card title="Notes" icon="circle">
+    Single hit objects requiring one key press
+  </Card>
+  <Card title="Hold Notes" icon="grip-lines">
+    Long notes requiring press, hold, and release
+  </Card>
+</CardGroup>
+
+### Notes
+
+Simple objects requiring a single key press at the correct time.
+
+**Source:** `osu.Game.Rulesets.Mania/Objects/Note.cs:12`
+
+```csharp
+/// <summary>
+/// Represents a hit object which has a single hit press.
+/// </summary>
+public class Note : ManiaHitObject
+{
+    public override Judgement CreateJudgement() => new ManiaJudgement();
+}
+```
+
+Notes inherit column assignment from `ManiaHitObject`:
+
+```csharp
+public int Column { get; set; }  // Which lane the note appears in
+```
+
+### Hold Notes
+
+Long notes (LNs) requiring sustained key press.
+
+**Source:** `osu.Game.Rulesets.Mania/Objects/HoldNote.cs:19`
+
+```csharp
+/// <summary>
+/// Represents a hit object which requires pressing, holding, and releasing a key.
+/// </summary>
+public class HoldNote : ManiaHitObject, IHasDuration
+{
+    public double Duration { get; set; }
+    public double EndTime => StartTime + Duration;
+    
+    public HeadNote Head { get; protected set; }
+    public TailNote Tail { get; protected set; }
+    public HoldNoteBody Body { get; protected set; }
+    
+    public bool PlaySlidingSamples { get; init; }
+}
+```
+
+**Hold Note Components:**
+
+1. **Head**: Initial press (judged on timing)
+2. **Body**: Sustained hold (invisible judgement tracker)
+3. **Tail**: Release (judged on timing)
+
+**Nested Object Creation** (`HoldNote.cs:96-123`):
+
+```csharp
+protected override void CreateNestedHitObjects(CancellationToken cancellationToken)
+{
+    base.CreateNestedHitObjects(cancellationToken);
+    
+    // Ensure node samples exist
+    NodeSamples ??= CreateDefaultNodeSamples(this);
+    
+    AddNested(Head = new HeadNote
+    {
+        StartTime = StartTime,
+        Column = Column,
+        Samples = GetNodeSamples(0),
+    });
+    
+    AddNested(Tail = new TailNote
+    {
+        StartTime = EndTime,
+        Column = Column,
+        Samples = GetNodeSamples(NodeSamples.Count - 1),
+    });
+    
+    AddNested(Body = new HoldNoteBody
+    {
+        StartTime = StartTime,
+        Column = Column
+    });
+}
+```
+
+<Info>
+By default, hold notes only play samples at the head (start). The tail is silent unless explicitly configured in the beatmap.
+</Info>
+
+## Key Configurations
+
+**Source:** `ManiaRuleset.cs:48-51`
+
+osu!mania supports variable key counts:
+
+```csharp
+/// <summary>
+/// The maximum number of supported keys in a single stage.
+/// </summary>
+public const int MAX_STAGE_KEYS = 10;
+```
+
+### Playfield Types
+
+```csharp
+public enum PlayfieldType
+{
+    /// <summary>
+    /// Columns are grouped into a single stage.
+    /// Number of columns lies at (item - Single).
+    /// </summary>
+    Single = 0,
+    
+    /// <summary>
+    /// Columns are grouped into two stages.
+    /// Overall number of columns lies at (item - Dual).
+    /// </summary>
+    Dual = 1000,
+}
+```
+
+**Available Variants** (`ManiaRuleset.cs:330-339`):
+
+```csharp
+public override IEnumerable<int> AvailableVariants
+{
+    get
+    {
+        // Single stage: 1K through 10K
+        for (int i = 1; i <= MAX_STAGE_KEYS; i++)
+            yield return (int)PlayfieldType.Single + i;
+        
+        // Dual stage: 2K+2K through 10K+10K
+        for (int i = 2; i <= MAX_STAGE_KEYS * 2; i += 2)
+            yield return (int)PlayfieldType.Dual + i;
+    }
+}
+```
+
+### Variant Naming
+
+```csharp
+public override LocalisableString GetVariantName(int variant)
+{
+    switch (getPlayfieldType(variant))
+    {
+        default:
+            return $"{variant}K";  // "7K"
+        
+        case PlayfieldType.Dual:
+            int keys = getDualStageKeyCount(variant);
+            return $"{keys}K + {keys}K";  // "4K + 4K"
+    }
+}
+```
+
+<Tip>
+7K (7-key) is the most popular configuration. 4K is common for beginners. Dual stages (like 4K+4K) are used for cooperative play.
+</Tip>
+
+## Scoring System
+
+osu!mania uses a timing-based judgement system with more granular scoring than other modes.
+
+### Hit Results
+
+**Source:** `ManiaRuleset.cs:386-401`
+
+```csharp
+public override IEnumerable<HitResult> GetValidHitResults()
+{
+    return new[]
+    {
+        HitResult.Perfect,    // 320 points (±16ms at OD5)
+        HitResult.Great,      // 300 points (±40ms at OD5)
+        HitResult.Good,       // 200 points (±73ms at OD5)
+        HitResult.Ok,         // 100 points (±103ms at OD5)
+        HitResult.Meh,        // 50 points (±127ms at OD5)
+        HitResult.Miss,       // 0 points
+        
+        HitResult.IgnoreHit,  // Hold note body tracking
+        HitResult.ComboBreak, // Combo break without full miss
+        HitResult.IgnoreMiss,
+    };
+}
+```
+
+### Accuracy Calculation
+
+```
+Accuracy = (50×nMeh + 100×nOk + 200×nGood + 300×nGreat + 320×nPerfect) 
+         / (320×(nMeh + nOk + nGood + nGreat + nPerfect + nMiss))
+```
+
+<Info>
+Mania is the only mode with a "Perfect" judgement (320 points), providing higher score ceiling than "Great" (300 points).
+</Info>
+
+## Hit Windows
+
+Mania has the most complex hit window system of all modes.
+
+**Source:** `ManiaRuleset.cs:464-478`
+
+```csharp
+var hitWindows = new ManiaHitWindows();
+hitWindows.SetDifficulty(adjustedDifficulty.OverallDifficulty);
+hitWindows.IsConvert = !beatmapInfo.Ruleset.Equals(RulesetInfo);
+hitWindows.ClassicModActive = mods.Any(m => m is ManiaModClassic);
+
+yield return new RulesetBeatmapAttribute("Accuracy", @"OD", 
+    originalDifficulty.OverallDifficulty, 
+    adjustedDifficulty.OverallDifficulty, 10)
+{
+    Description = "Affects timing requirements for notes.",
+    AdditionalMetrics = hitWindows.GetAllAvailableWindows()
+        .Reverse()
+        .Select(window => new RulesetBeatmapAttribute.AdditionalMetric(
+            $"{window.result.GetDescription().ToUpperInvariant()} hit window",
+            LocalisableString.Interpolate($@"±{hitWindows.WindowFor(window.result):0.##} ms"),
+            colours.ForHitResult(window.result)
+        ))
+};
+```
+
+### Window Characteristics
+
+**Source:** `ManiaRuleset.cs:423-447`
+
+```csharp
+public override BeatmapDifficulty GetAdjustedDisplayDifficulty(IBeatmapInfo beatmapInfo, 
+                                                               IReadOnlyCollection<Mod> mods)
+{
+    BeatmapDifficulty adjustedDifficulty = base.GetAdjustedDisplayDifficulty(beatmapInfo, mods);
+    
+    // In mania, hit windows are independent of track playback rate
+    // However, Hard Rock and Easy apply multipliers to hit window durations directly
+    // rather than to OD itself
+    
+    double perfectHitWindow = IBeatmapDifficultyInfo.DifficultyRange(
+        adjustedDifficulty.OverallDifficulty, 
+        ManiaHitWindows.PERFECT_WINDOW_RANGE);
+    
+    if (mods.Any(m => m is ManiaModHardRock))
+        perfectHitWindow /= ManiaModHardRock.HIT_WINDOW_DIFFICULTY_MULTIPLIER;
+    else if (mods.Any(m => m is ManiaModEasy))
+        perfectHitWindow /= ManiaModEasy.HIT_WINDOW_DIFFICULTY_MULTIPLIER;
+    
+    adjustedDifficulty.OverallDifficulty = (float)IBeatmapDifficultyInfo.InverseDifficultyRange(
+        perfectHitWindow, ManiaHitWindows.PERFECT_WINDOW_RANGE);
+    
+    return adjustedDifficulty;
+}
+```
+
+<Tip>
+Unlike other modes, mania hit windows are **not affected by rate-changing mods** like Double Time. This is intentional to preserve difficulty.
+</Tip>
+
+## Difficulty Attributes
+
+**Source:** `ManiaRuleset.cs:449-484`
+
+### Key Count
+
+Displayed as Circle Size but represents number of keys:
+
+```csharp
+var originalDifficulty = new BeatmapDifficulty(beatmapInfo.Difficulty)
+{
+    CircleSize = ManiaBeatmapConverter.GetColumnCount(
+        LegacyBeatmapConversionDifficultyInfo.FromBeatmapInfo(beatmapInfo), [])
+};
+var adjustedDifficulty = GetAdjustedDisplayDifficulty(beatmapInfo, mods);
+
+yield return new RulesetBeatmapAttribute("Key Count", @"KC", 
+    originalDifficulty.CircleSize, 
+    adjustedDifficulty.CircleSize, 18)
+{
+    Description = "Affects the number of key columns on the playfield."
+};
+```
+
+Key conversion mods (1K-10K) change the key count:
+
+```csharp
+adjustedDifficulty.CircleSize = ManiaBeatmapConverter.GetColumnCount(
+    LegacyBeatmapConversionDifficultyInfo.FromBeatmapInfo(beatmapInfo), mods);
+```
+
+### Overall Difficulty (OD)
+
+Controls hit window sizes for all judgements.
+
+### HP Drain
+
+Controls health drain and miss penalties.
+
+## Input Handling
+
+**Source:** `ManiaRuleset.cs:341-353`
+
+Key bindings are generated based on variant:
+
+```csharp
+public override IEnumerable<KeyBinding> GetDefaultKeyBindings(int variant = 0)
+{
+    switch (getPlayfieldType(variant))
+    {
+        case PlayfieldType.Single:
+            return new SingleStageVariantGenerator(variant).GenerateMappings();
+        
+        case PlayfieldType.Dual:
+            return new DualStageVariantGenerator(getDualStageKeyCount(variant))
+                .GenerateMappings();
+    }
+    
+    return Array.Empty<KeyBinding>();
+}
+```
+
+Common layouts:
+- **4K**: D, F, J, K
+- **7K**: S, D, F, Space, J, K, L
+- **Dual 4K**: D, F, J, K (left) + numpad keys (right)
+
+<Info>
+Players often customize key bindings to match their finger positioning preferences.
+</Info>
+
+## Unique Features
+
+### Scrolling Direction
+
+Notes scroll from top to bottom (or bottom to top with mods):
+
+```csharp
+public override bool EditorShowScrollSpeed => true;  // Mania shows scroll speed in editor
+```
+
+### Column-Based Gameplay
+
+Each column is independent - notes in different columns can be hit simultaneously:
+
+```csharp
+public int Column { get; set; }  // 0-indexed column position
+```
+
+### Hold Note Mechanics
+
+Hold notes have complex scoring:
+
+1. **Head judgement**: Based on press timing
+2. **Hold judgement**: Must maintain key press
+3. **Tail judgement**: Based on release timing
+
+Releasing early results in a miss for the tail.
+
+### No Combo Scaling
+
+Unlike other modes, mania score doesn't scale with combo:
+
+```csharp
+public override Judgement CreateJudgement() => new IgnoreJudgement();  // Hold note parent
+```
+
+Only the nested components (head, body, tail) provide score.
+
+### Convert vs. Native
+
+Mania beatmaps can be:
+
+- **Native**: Created specifically for mania (better patterns)
+- **Converted**: Auto-converted from other modes (varied quality)
+
+```csharp
+hitWindows.IsConvert = !beatmapInfo.Ruleset.Equals(RulesetInfo);
+```
+
+Converted maps often use more lenient hit windows.
+
+## Performance Calculation
+
+Mania difficulty calculation evaluates:
+
+1. **Strain**: Note density and pattern complexity
+2. **Accuracy**: Timing precision requirements
+3. **Key Count**: More keys = higher potential difficulty
+
+<Info>
+Difficulty calculation is key-count aware - the same pattern is harder on 7K than 4K.
+</Info>
+
+## Beatmap Conversion
+
+When converting from osu!standard to mania:
+
+**Source:** `ManiaRuleset.cs:59`
+
+```csharp
+public override IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap) 
+    => new ManiaBeatmapConverter(beatmap, this);
+```
+
+Conversion process:
+1. Determine key count from Circle Size and mods
+2. Map hit objects to columns based on horizontal position
+3. Convert sliders to hold notes with duration
+4. Distribute spinner duration across columns
+
+## Key Mods
+
+**Source:** `ManiaRuleset.cs:271-282`
+
+Mania-specific key conversion mods:
+
+```csharp
+new MultiMod(
+    new ManiaModKey1(),
+    new ManiaModKey2(),
+    new ManiaModKey3(),
+    new ManiaModKey4(),
+    new ManiaModKey5(),
+    new ManiaModKey6(),
+    new ManiaModKey7(),
+    new ManiaModKey8(),
+    new ManiaModKey9(),
+    new ManiaModKey10()
+),
+```
+
+These mods force a specific key count regardless of beatmap settings.
+
+## Related Files
+
+- Main Ruleset: `osu.Game.Rulesets.Mania/ManiaRuleset.cs`
+- Hit Objects: `osu.Game.Rulesets.Mania/Objects/`
+- Beatmap Conversion: `osu.Game.Rulesets.Mania/Beatmaps/ManiaBeatmapConverter.cs`
+- Scoring: `osu.Game.Rulesets.Mania/Scoring/ManiaScoreProcessor.cs`
+- Difficulty: `osu.Game.Rulesets.Mania/Difficulty/`
+- UI: `osu.Game.Rulesets.Mania/UI/`
+- Variant Generation: `osu.Game.Rulesets.Mania/SingleStageVariantGenerator.cs`, `DualStageVariantGenerator.cs`

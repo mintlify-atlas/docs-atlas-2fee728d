@@ -1,80 +1,154 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get started with osu! in minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+Get osu! up and running quickly and start playing your first beatmap.
 
-### Step 1: Set up your local environment
+## Download and install
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+<Steps>
+  <Step title="Choose your platform">
+    Select the appropriate download for your operating system:
 
-### Step 2: Deploy your changes
+    <CardGroup cols={3}>
+      <Card title="Windows" icon="windows" href="https://github.com/ppy/osu/releases/latest/download/install.exe">
+        Windows 10+ (x64)
+      </Card>
+      <Card title="macOS" icon="apple" href="https://github.com/ppy/osu/releases/latest">
+        macOS 12+ (Intel & Apple Silicon)
+      </Card>
+      <Card title="Linux" icon="linux" href="https://github.com/ppy/osu/releases/latest/download/osu.AppImage">
+        Linux x64 AppImage
+      </Card>
+    </CardGroup>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    <Info>
+      Mobile versions are also available for [iOS (TestFlight)](https://osu.ppy.sh/home/testflight) and [Android](https://github.com/ppy/osu/releases/latest/download/sh.ppy.osulazer.apk).
+    </Info>
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Run the installer">
+    After downloading, run the installer for your platform:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    **Windows**: Run `install.exe` and follow the installation wizard.
 
-### Step 3: Go live
+    **macOS**: Extract the zip file and drag osu!.app to your Applications folder.
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    **Linux**: Make the AppImage executable and run it:
+
+    ```bash
+    chmod +x osu.AppImage
+    ./osu.AppImage
+    ```
+  </Step>
+
+  <Step title="Launch osu!">
+    Start osu! for the first time. The game will:
+    - Perform initial setup and download required resources
+    - Guide you through basic configuration (audio, graphics, input)
+    - Prompt you to create or log in to your account
+  </Step>
+
+  <Step title="Create your account">
+    Sign up for a free osu! account to:
+    - Save your scores and statistics
+    - Compete on global leaderboards
+    - Play multiplayer with others
+    - Track your performance over time
+
+    <Note>
+      You can play offline without an account, but scores won't be submitted to leaderboards.
+    </Note>
+  </Step>
+</Steps>
+
+## Play your first beatmap
+
+<Steps>
+  <Step title="Browse beatmaps">
+    Click **Play** from the main menu to open the song selection screen.
+
+    If you're new, you can download beatmaps directly in-game:
+    1. Click the **Download beatmaps** button
+    2. Browse or search for songs you like
+    3. Click to download and import
+  </Step>
+
+  <Step title="Select difficulty">
+    Each beatmap has multiple difficulty levels:
+    - **Easy**: Perfect for beginners
+    - **Normal**: Standard difficulty
+    - **Hard**: Challenging gameplay
+    - **Insane/Expert**: For experienced players
+
+    Start with an Easy or Normal difficulty to learn the basics.
+  </Step>
+
+  <Step title="Start playing">
+    Press **Enter** or click the beatmap to start playing.
+
+    **Basic controls (osu!standard mode)**:
+    - Click circles with `Z` and `X` keys (or mouse clicks)
+    - Follow sliders by holding down the key
+    - Spin spinners by moving your cursor in circles
+
+    <Tip>
+      You can customize key bindings in **Settings** → **Input** → **Keyboard**.
+    </Tip>
+  </Step>
+
+  <Step title="View your results">
+    After completing a beatmap, you'll see your:
+    - Score and accuracy
+    - Combo count
+    - Grade (F, D, C, B, A, S, SS)
+    - Performance points (PP) if you're playing ranked beatmaps
+
+    Your score will be submitted to the leaderboard if you're logged in and playing a ranked map.
+  </Step>
+</Steps>
+
+## Try different game modes
+
+osu! includes four distinct game modes. Try each one to find your favorite!
+
+<CardGroup cols={2}>
+  <Card title="osu!standard" icon="circle-dot" href="/game-modes/osu-standard">
+    Click circles, slide sliders, and spin spinners
+  </Card>
+  <Card title="osu!taiko" icon="drum" href="/game-modes/taiko">
+    Hit the drum to match the rhythm
+  </Card>
+  <Card title="osu!catch" icon="apple-whole" href="/game-modes/catch">
+    Catch falling fruits with your catcher
+  </Card>
+  <Card title="osu!mania" icon="music" href="/game-modes/mania">
+    Press keys when notes reach the judgment line
+  </Card>
+</CardGroup>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Installation guide" icon="download" href="/installation">
+    Detailed platform-specific installation instructions
+  </Card>
+  <Card title="Game modes" icon="gamepad" href="/game-modes/overview">
+    Learn about all four game modes
+  </Card>
+  <Card title="Beatmaps" icon="map" href="/features/beatmaps">
+    Understand beatmap structure and difficulty
+  </Card>
+  <Card title="Mods" icon="wand-sparkles" href="/features/mods">
+    Customize gameplay with modifiers
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Need help?
+
+<Info>
+  Join the [osu! Discord server](https://discord.gg/ppy) for community support, or check out the [wiki](https://osu.ppy.sh/wiki/) for detailed guides.
+</Info>

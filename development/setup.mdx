@@ -1,0 +1,135 @@
+---
+title: Development Setup
+description: Set up your development environment for osu! development
+---
+
+# Development Setup
+
+This guide will walk you through setting up your development environment for osu! development.
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+### Required Software
+
+<Steps>
+  <Step title="Install .NET 8.0 SDK">
+    Download and install the [.NET 8.0 SDK](https://dotnet.microsoft.com/download) for your platform.
+
+    The project uses .NET 8.0.100 with `latestFeature` roll-forward policy as specified in `global.json`.
+  </Step>
+
+  <Step title="Choose an IDE">
+    We recommend using an IDE with intelligent code completion and syntax highlighting:
+
+    <CardGroup cols={3}>
+      <Card title="Visual Studio" icon="microsoft">
+        Latest version recommended for Windows development
+      </Card>
+      <Card title="JetBrains Rider" icon="laptop-code">
+        Cross-platform IDE with excellent C# support
+      </Card>
+      <Card title="Visual Studio Code" icon="code">
+        Lightweight editor with extensions
+      </Card>
+    </CardGroup>
+  </Step>
+</Steps>
+
+### Visual Studio Code Setup
+
+If using VS Code, install these required extensions:
+
+- [EditorConfig](https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig) - Maintains consistent coding styles
+- [C# Dev Kit](https://marketplace.visualstudio.com/items?itemName=ms-dotnettools.csdevkit) - C# language support
+
+## Downloading the Source Code
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/ppy/osu
+    cd osu
+    ```
+  </Step>
+
+  <Step title="Verify your setup">
+    Check that you have the correct .NET SDK version:
+
+    ```bash
+    dotnet --version
+    ```
+
+    You should see version 8.0.100 or later.
+  </Step>
+</Steps>
+
+## Updating the Source Code
+
+To update your local repository to the latest commit:
+
+```bash
+cd osu
+git pull
+```
+
+## Mobile Development Setup
+
+<Warning>
+  Mobile platform development requires additional setup steps.
+</Warning>
+
+If you plan to develop for Android or iOS platforms, you need to install the required workloads:
+
+```bash
+sudo dotnet workload restore
+```
+
+This installs the Android/iOS tooling required to complete mobile builds.
+
+## Solution Files
+
+<Note>
+  Load the solution via platform-specific `.slnf` files rather than the main `.sln` file.
+</Note>
+
+The project uses filtered solution files to reduce dependencies and hide irrelevant platforms:
+
+<CodeGroup>
+```bash Desktop (Most Common)
+osu.Desktop.slnf
+```
+
+```bash Android
+osu.Android.slnf
+```
+
+```bash iOS
+osu.iOS.slnf
+```
+</CodeGroup>
+
+Open the appropriate `.slnf` file in your IDE based on your target platform.
+
+## Testing Your Setup
+
+Once you've completed the setup, you can verify everything works by building the project:
+
+```bash
+dotnet restore
+dotnet build osu.Desktop
+```
+
+If the build succeeds, you're ready to start developing!
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building" icon="hammer" href="/development/building">
+    Learn how to build and run osu!
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/development/architecture">
+    Understand the codebase structure
+  </Card>
+</CardGroup>

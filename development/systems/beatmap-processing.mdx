@@ -1,0 +1,261 @@
+---
+title: Beatmap Processing System
+description: Core architecture for beatmap management, conversion, and processing in osu!
+---
+
+The beatmap processing system in osu! handles the entire lifecycle of beatmaps from import to gameplay-ready conversion. This system is responsible for managing beatmap storage, converting between game modes, and processing hit objects.
+
+## Core Components
+
+### BeatmapManager
+
+The `BeatmapManager` class is the central hub for all beatmap-related operations. It implements `IModelImporter<BeatmapSetInfo>` and `IWorkingBeatmapCache` to provide comprehensive beatmap management.
+
+**Location**: `osu.Game/Beatmaps/BeatmapManager.cs:37`
+
+<Card title="Key Responsibilities" icon="list">
+  - Import and export beatmap sets
+  - Create new beatmaps and difficulties
+  - Manage working beatmap cache
+  - Handle beatmap metadata and updates
+  - Database operations via Realm
+</Card>
+
+#### Important Methods
+
+```csharp
+// Create a new beatmap set with a single difficulty
+public WorkingBeatmap CreateNew(RulesetInfo ruleset, APIUser user)
+
+// Get a working beatmap instance for gameplay
+public WorkingBeatmap GetWorkingBeatmap(BeatmapInfo beatmapInfo, bool refetch = false)
+
+// Save beatmap content to disk
+public virtual void Save(BeatmapInfo beatmapInfo, IBeatmap beatmapContent, ISkin beatmapSkin = null)
+
+// Import beatmaps from files
+public Task Import(params string[] paths)
+```
+
+**Key Properties:**
+- `BeatmapTrackStore`: Audio track store for beatmap music (line 39)
+- `ProcessBeatmap`: Delegate for post-import processing (line 49)
+- `DefaultBeatmap`: Fallback beatmap when none is available (line 350)
+
+### WorkingBeatmap
+
+The `WorkingBeatmap` class represents a usable beatmap instance with all its resources (audio, background, storyboard, skin).
+
+**Location**: `osu.Game/Beatmaps/WorkingBeatmap.cs:27`
+
+<Info>
+  WorkingBeatmap uses lazy loading for expensive resources like storyboards and skins to optimize performance. Resources are only loaded when accessed.
+</Info>
+
+#### Core Features
+
+```csharp
+// Lazy-loaded resources
+public Storyboard Storyboard => storyboard.Value;
+public ISkin Skin => skin.Value;
+public Track Track { get; }
+public Waveform Waveform { get; }
+
+// Get the raw beatmap data
+protected abstract IBeatmap GetBeatmap();
+
+// Convert beatmap to playable format with mods
+public IBeatmap GetPlayableBeatmap(IRulesetInfo ruleset, IReadOnlyList<Mod> mods = null)
+```
+
+**Playable Beatmap Conversion** (line 274):
+
+1. Create ruleset instance
+2. Create beatmap converter
+3. Apply conversion mods
+4. Convert hit objects
+5. Apply difficulty mods
+6. Run beatmap processor (PreProcess)
+7. Apply hit object defaults
+8. Apply hit object mods
+9. Run beatmap processor (PostProcess)
+10. Apply final beatmap mods
+
+### BeatmapConverter
+
+Converts beatmaps between different game modes (e.g., osu!standard to osu!taiko).
+
+**Location**: `osu.Game/Beatmaps/BeatmapConverter.cs:21`
+
+```csharp
+public abstract class BeatmapConverter<T> : IBeatmapConverter
+    where T : HitObject
+{
+    // Check if conversion is possible
+    public abstract bool CanConvert();
+    
+    // Perform the conversion
+    public IBeatmap Convert(CancellationToken cancellationToken = default)
+    {
+        // Clone the original beatmap
+        var original = Beatmap.Clone();
+        original.BeatmapInfo = original.BeatmapInfo.Clone();
+        original.ControlPointInfo = original.ControlPointInfo.DeepClone();
+        
+        return ConvertBeatmap(original, cancellationToken);
+    }
+    
+    // Convert individual hit objects
+    protected abstract IEnumerable<T> ConvertHitObject(
+        HitObject original, 
+        IBeatmap beatmap, 
+        CancellationToken cancellationToken);
+}
+```
+
+<Warning>
+  BeatmapConverter always operates on a **clone** of the original beatmap to avoid modifying the game-wide instance. This includes deep cloning the BeatmapInfo and ControlPointInfo.
+</Warning>
+
+### BeatmapProcessor
+
+Post-processes converted beatmaps to set up ruleset-specific attributes.
+
+**Location**: `osu.Game/Beatmaps/BeatmapProcessor.cs:12`
+
+```csharp
+public class BeatmapProcessor : IBeatmapProcessor
+{
+    public IBeatmap Beatmap { get; }
+    
+    // Called before hit object defaults are applied
+    public virtual void PreProcess()
+    {
+        IHasComboInformation lastObj = null;
+        
+        foreach (var obj in Beatmap.HitObjects.OfType<IHasComboInformation>())
+        {
+            obj.UpdateComboInformation(lastObj);
+            lastObj = obj;
+        }
+    }
+    
+    // Called after all mods and defaults are applied
+    public virtual void PostProcess() { }
+}
+```
+
+**Processing Order:**
+1. `PreProcess()` - Set up combo numbers and indices
+2. Apply hit object defaults (timing, samples, etc.)
+3. `PostProcess()` - Final adjustments
+
+## Beatmap Import Pipeline
+
+The import system handles adding new beatmap sets to the game's database.
+
+<Card title="Import Flow" icon="download">
+  1. **BeatmapImporter** receives files (.osz archives or directories)
+  2. Extract and parse .osu files using `LegacyBeatmapDecoder`
+  3. Create `BeatmapSetInfo` and `BeatmapInfo` models
+  4. Store files in Realm database
+  5. Calculate beatmap hash and metadata
+  6. Trigger `ProcessBeatmap` delegate for difficulty calculation
+  7. Add to `WorkingBeatmapCache`
+</Card>
+
+### Supported Operations
+
+```csharp
+// Import from file paths
+await beatmapManager.Import("path/to/beatmap.osz");
+
+// Import as update to existing beatmap
+await beatmapManager.ImportAsUpdate(notification, importTask, originalBeatmap);
+
+// Export beatmap
+await beatmapManager.Export(beatmapSet);
+await beatmapManager.ExportLegacy(beatmapSet); // .osz format
+
+// Delete beatmap
+beatmapManager.Delete(beatmapSet => beatmapSet.OnlineID == 123456);
+
+// Create new difficulty in existing set
+var newDifficulty = beatmapManager.CreateNewDifficulty(
+    targetBeatmapSet, 
+    referenceBeatmap, 
+    rulesetInfo
+);
+```
+
+## Working Beatmap Cache
+
+The `WorkingBeatmapCache` maintains active beatmap instances to avoid repeated parsing and loading.
+
+**Key Features:**
+- LRU caching strategy
+- Automatic invalidation on beatmap updates
+- Track transfer optimization (reuse audio between difficulties)
+- Thread-safe access
+
+```csharp
+// Get cached or create new working beatmap
+var working = beatmapManager.GetWorkingBeatmap(beatmapInfo);
+
+// Force refresh from database
+var working = beatmapManager.GetWorkingBeatmap(beatmapInfo, refetch: true);
+
+// Invalidate cache entry
+beatmapManager.Invalidate(beatmapSetInfo);
+```
+
+## Beatmap Storage Structure
+
+osu! uses Realm database for beatmap metadata and file storage:
+
+- **BeatmapSetInfo**: Contains all difficulties and shared metadata
+- **BeatmapInfo**: Individual difficulty information
+- **RealmFile**: File references (audio, background, .osu files)
+- **BeatmapMetadata**: Artist, title, mapper information
+
+## Performance Considerations
+
+<Card title="Optimization Strategies" icon="zap">
+  - **Lazy Loading**: Storyboards and skins load on-demand
+  - **Async Operations**: Import and export run asynchronously
+  - **Cache Management**: WorkingBeatmapCache prevents redundant parsing
+  - **Track Transfer**: Audio tracks shared between difficulties (line 145)
+  - **Cancellation Tokens**: Long operations support cancellation
+</Card>
+
+## Example: Creating and Saving a Beatmap
+
+```csharp
+// Create new beatmap set
+var working = beatmapManager.CreateNew(rulesetInfo, currentUser);
+
+// Modify the beatmap
+var beatmap = working.Beatmap;
+beatmap.HitObjects.Add(new HitCircle 
+{ 
+    StartTime = 1000, 
+    Position = new Vector2(256, 192) 
+});
+
+// Save changes
+beatmapManager.Save(
+    working.BeatmapInfo, 
+    beatmap, 
+    working.Skin
+);
+
+// The beatmap is now marked as LocallyModified
+// Hash is recalculated automatically
+```
+
+## Related Systems
+
+- **BeatmapDifficultyCache**: Calculates and caches star ratings
+- **BeatmapUpdater**: Handles metadata updates from online sources
+- **BeatmapImporter**: Manages the import pipeline
+- **Ruleset**: Provides game mode-specific converters and processors

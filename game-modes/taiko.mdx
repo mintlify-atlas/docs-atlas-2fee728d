@@ -1,0 +1,368 @@
+---
+title: osu!taiko
+description: A drum-based rhythm game mode inspired by Taiko no Tatsujin
+---
+
+osu!taiko is a drum-based rhythm game mode where players hit the drum in time with the music using centre (don) and rim (kat) hits.
+
+## Hit Objects
+
+osu!taiko has three main types of hit objects, all defined in `osu.Game.Rulesets.Taiko/Objects/`:
+
+<CardGroup cols={3}>
+  <Card title="Hits" icon="circle">
+    Single drum hits - either centre (red) or rim (blue)
+  </Card>
+  <Card title="Drum Rolls" icon="wave-pulse">
+    Sustained objects requiring rapid hitting
+  </Card>
+  <Card title="Swells" icon="certificate">
+    Special objects requiring mashing to complete
+  </Card>
+</CardGroup>
+
+### Hits
+
+The fundamental hit object in taiko - a single drum hit at a specific time.
+
+**Source:** `osu.Game.Rulesets.Taiko/Objects/Hit.cs:14`
+
+```csharp
+public class Hit : TaikoStrongableHitObject, IHasDisplayColour
+{
+    public HitType Type { get; set; }  // Centre or Rim
+    public Bindable<Color4> DisplayColour { get; } = new Bindable<Color4>(COLOUR_CENTRE);
+    
+    public static readonly Color4 COLOUR_CENTRE = Color4Extensions.FromHex(@"bb1177");  // Red/Pink
+    public static readonly Color4 COLOUR_RIM = Color4Extensions.FromHex(@"2299bb");     // Blue
+}
+```
+
+**Hit Type Determination** (`Hit.cs:45-53`):
+
+```csharp
+private void updateTypeFromSamples()
+{
+    Type = getRimSamples().Any() ? HitType.Rim : HitType.Centre;
+}
+
+private HitSampleInfo[] getRimSamples() => Samples
+    .Where(s => s.Name == HitSampleInfo.HIT_CLAP || s.Name == HitSampleInfo.HIT_WHISTLE)
+    .ToArray();
+```
+
+<Info>
+Taiko determines hit type from hitsound samples: clap/whistle sounds indicate rim hits, while normal sounds indicate centre hits.
+</Info>
+
+**Strong Hits:**
+
+Hits can be "strong" (finisher notes), requiring both drum inputs simultaneously:
+
+```csharp
+protected override StrongNestedHitObject CreateStrongNestedHit(double startTime) 
+    => new StrongNestedHit(this)
+{
+    StartTime = startTime,
+    Samples = Samples
+};
+```
+
+### Drum Rolls
+
+Sustained objects that generate ticks to be hit rapidly.
+
+**Source:** `osu.Game.Rulesets.Taiko/Objects/DrumRoll.cs:16`
+
+```csharp
+public class DrumRoll : TaikoStrongableHitObject, IHasPath
+{
+    public double Duration { get; set; }
+    public double Velocity { get; private set; }
+    public int TickRate = 1;  // Ticks per beat
+    private double tickSpacing = 100;  // Time between ticks
+}
+```
+
+**Velocity Calculation** (`DrumRoll.cs:47-60`):
+
+```csharp
+protected override void ApplyDefaultsToSelf(ControlPointInfo controlPointInfo, 
+                                           IBeatmapDifficultyInfo difficulty)
+{
+    base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+    
+    TimingControlPoint timingPoint = controlPointInfo.TimingPointAt(StartTime);
+    EffectControlPoint effectPoint = controlPointInfo.EffectPointAt(StartTime);
+    
+    double scoringDistance = base_distance 
+        * (difficulty.SliderMultiplier * TaikoBeatmapConverter.VELOCITY_MULTIPLIER) 
+        * effectPoint.ScrollSpeed;
+    Velocity = scoringDistance / timingPoint.BeatLength;
+    
+    TickRate = difficulty.SliderTickRate == 3 ? 3 : 4;
+    tickSpacing = timingPoint.BeatLength / TickRate;
+}
+```
+
+**Tick Generation** (`DrumRoll.cs:69-91`):
+
+```csharp
+private void createTicks(CancellationToken cancellationToken)
+{
+    if (tickSpacing == 0)
+        return;
+    
+    bool first = true;
+    
+    for (double t = StartTime; t < EndTime + tickSpacing / 2; t += tickSpacing)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        AddNested(new DrumRollTick(this)
+        {
+            FirstTick = first,
+            TickSpacing = tickSpacing,
+            StartTime = t,
+            IsStrong = IsStrong,
+            Samples = Samples
+        });
+        
+        first = false;
+    }
+}
+```
+
+<Tip>
+Drum roll tick rate is either 3 or 4 ticks per beat, depending on the beatmap's slider tick rate setting.
+</Tip>
+
+### Swells
+
+Bonus objects requiring rapid alternating hits to complete.
+
+**Source:** `osu.Game.Rulesets.Taiko/Objects/Swell.cs:12`
+
+```csharp
+public class Swell : TaikoHitObject, IHasDuration
+{
+    public double Duration { get; set; }
+    public int RequiredHits = 10;  // Number of hits needed
+}
+```
+
+**Nested Hit Generation** (`Swell.cs:27-40`):
+
+```csharp
+protected override void CreateNestedHitObjects(CancellationToken cancellationToken)
+{
+    base.CreateNestedHitObjects(cancellationToken);
+    
+    for (int i = 0; i < RequiredHits; i++)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        AddNested(new SwellTick
+        {
+            StartTime = StartTime,
+            Samples = Samples
+        });
+    }
+}
+```
+
+## Scoring System
+
+Taiko uses a straightforward combo-based scoring system.
+
+### Hit Results
+
+**Source:** `TaikoRuleset.cs:225-238`
+
+```csharp
+public override IEnumerable<HitResult> GetValidHitResults()
+{
+    return new[]
+    {
+        HitResult.Great,      // Perfect hit (within great window)
+        HitResult.Ok,         // Good hit (within ok window)
+        HitResult.Miss,       // Missed or hit too early/late
+        
+        HitResult.SmallBonus, // Drum roll tick hit
+        HitResult.LargeBonus, // Strong hit bonus
+        HitResult.IgnoreHit,
+        HitResult.IgnoreMiss,
+    };
+}
+```
+
+### Hit Windows
+
+Taiko uses two timing windows:
+
+**Source:** `TaikoRuleset.cs:284-286`
+
+| Judgement | OD 0 | OD 5 | OD 10 |
+|-----------|------|------|-------|
+| Great | ±50ms | ±35ms | ±20ms |
+| Ok | ±120ms | ±80ms | ±50ms |
+
+<Info>
+Taiko has tighter timing windows than osu!standard, and only two judgement levels for regular hits.
+</Info>
+
+### Accuracy Calculation
+
+```
+Accuracy = (0.5×nOk + 1.0×nGreat) / (nOk + nGreat + nMiss)
+```
+
+Drum roll ticks and swell hits contribute as bonus score but don't affect accuracy.
+
+## Difficulty Attributes
+
+**Source:** `TaikoRuleset.cs:291-330`
+
+### Overall Difficulty (OD)
+
+Affects hit windows and swell requirements:
+
+```csharp
+var hitWindows = new TaikoHitWindows();
+hitWindows.SetDifficulty(modAdjustedDifficulty.OverallDifficulty);
+double rate = ModUtils.CalculateRateWithMods(mods);
+
+yield return new RulesetBeatmapAttribute("Accuracy", @"OD", 
+    originalDifficulty.OverallDifficulty, 
+    effectiveDifficulty.OverallDifficulty, 10)
+{
+    Description = "Affects timing requirements for hits and mash rate requirements for swells.",
+    AdditionalMetrics = hitWindows.GetAllAvailableWindows()
+        .Reverse()
+        .Select(window => new RulesetBeatmapAttribute.AdditionalMetric(
+            $"{window.result.GetDescription().ToUpperInvariant()} hit window",
+            LocalisableString.Interpolate($@"±{hitWindows.WindowFor(window.result) / rate:0.##} ms"),
+            colours.ForHitResult(window.result)
+        ))
+        .Append(new RulesetBeatmapAttribute.AdditionalMetric(
+            "Hits per second required to clear swells", 
+            LocalisableString.Interpolate(
+                $@"{TaikoBeatmapConverter.RequiredSwellHitsPerSecond(
+                    modAdjustedDifficulty.OverallDifficulty):0.#}"
+            )
+        ))
+};
+```
+
+### Scroll Speed
+
+Taiko is a scrolling mode - objects move from right to left:
+
+```csharp
+yield return new RulesetBeatmapAttribute("Scroll Speed", @"SS", 1f, 
+    (float)(effectiveDifficulty.SliderMultiplier / originalDifficulty.SliderMultiplier), 4)
+{
+    Description = "Multiplier applied to the baseline scroll speed of the playfield when no mods are active."
+};
+```
+
+### HP Drain
+
+Controls health drain and miss penalties.
+
+## Input Handling
+
+**Source:** `TaikoRuleset.cs:78-86`
+
+```csharp
+public override IEnumerable<KeyBinding> GetDefaultKeyBindings(int variant = 0) => new[]
+{
+    new KeyBinding(InputKey.MouseRight, TaikoAction.LeftRim),
+    new KeyBinding(InputKey.D, TaikoAction.LeftRim),
+    new KeyBinding(InputKey.MouseLeft, TaikoAction.LeftCentre),
+    new KeyBinding(InputKey.F, TaikoAction.LeftCentre),
+    new KeyBinding(InputKey.J, TaikoAction.RightCentre),
+    new KeyBinding(InputKey.K, TaikoAction.RightRim),
+};
+```
+
+### Input Requirements
+
+- **Centre Hits**: Press left or right centre key
+- **Rim Hits**: Press left or right rim key
+- **Strong Hits**: Press both centre keys (or both rim keys) simultaneously
+- **Drum Rolls**: Rapidly alternate between any drum inputs
+- **Swells**: Rapidly alternate between centre and rim
+
+<Tip>
+Many players bind all four keys to different fingers for maximum speed and stamina.
+</Tip>
+
+## Unique Features
+
+### Scrolling Playfield
+
+Unlike osu!standard's static playfield, taiko objects scroll from right to left across the screen. The scroll speed affects reading difficulty.
+
+### No Aim Component
+
+Taiko removes the aim aspect - all hits occur at the same horizontal position. Difficulty comes from rhythm complexity and speed.
+
+### Drum Roll Strategy
+
+Drum rolls don't require perfect timing on each tick - players can mash rapidly to maximize score:
+
+```csharp
+public override Judgement CreateJudgement() => new IgnoreJudgement();
+```
+
+The parent drum roll object itself doesn't give a judgement - only the ticks matter.
+
+### Strong Hit Detection
+
+Strong hits require simultaneous input from both drum sides:
+
+```csharp
+public class StrongNestedHit : StrongNestedHitObject
+{
+    // The strong hit of the drum roll doesn't provide score
+    public override Judgement CreateJudgement() => new IgnoreJudgement();
+    
+    public StrongNestedHit(TaikoHitObject parent) : base(parent) { }
+}
+```
+
+## Performance Calculation
+
+Taiko difficulty calculation evaluates:
+
+1. **Stamina**: Sustained hitting speed requirements
+2. **Rhythm**: Pattern complexity and variation
+3. **Colour**: Pattern color changes (centre vs rim alternation)
+4. **Peak Difficulty**: Hardest sections of the map
+
+<Info>
+The colour skill is unique to taiko and measures how frequently players must switch between centre and rim hits.
+</Info>
+
+## Beatmap Conversion
+
+When converting from osu!standard to taiko:
+
+- **Hit Circles** → Centre or rim hits (based on hitsounds)
+- **Sliders** → Drum rolls with duration equal to slider length
+- **Spinners** → Swells with duration equal to spinner length
+
+Conversion uses the `TaikoBeatmapConverter` class with velocity multiplier:
+
+```csharp
+public const double VELOCITY_MULTIPLIER = 1.4;
+```
+
+## Related Files
+
+- Main Ruleset: `osu.Game.Rulesets.Taiko/TaikoRuleset.cs`
+- Hit Objects: `osu.Game.Rulesets.Taiko/Objects/`
+- Beatmap Conversion: `osu.Game.Rulesets.Taiko/Beatmaps/TaikoBeatmapConverter.cs`
+- Scoring: `osu.Game.Rulesets.Taiko/Scoring/TaikoScoreProcessor.cs`
+- Difficulty: `osu.Game.Rulesets.Taiko/Difficulty/`
+- UI: `osu.Game.Rulesets.Taiko/UI/DrawableTaikoRuleset.cs`

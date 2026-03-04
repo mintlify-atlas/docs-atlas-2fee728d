@@ -1,0 +1,457 @@
+---
+title: Code Style
+description: Code style guidelines and conventions for osu! development
+---
+
+The osu! project follows strict code style guidelines enforced through EditorConfig and code analysis tools. This ensures consistency across the codebase and makes code easier to read and maintain.
+
+## File Encoding and Line Endings
+
+### C# Files (.cs)
+
+```
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+```
+
+### Project Files (.csproj, .props, .targets)
+
+```
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+```
+
+### YAML Files (.yaml, .yml)
+
+```
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+trim_trailing_whitespace = true
+```
+
+## License Header
+
+<Warning>
+All C# source files must include the following license header:
+</Warning>
+
+```csharp
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+```
+
+## Naming Conventions
+
+The project uses strict naming conventions enforced at the error or warning level.
+
+### Public and Protected Members
+
+**Use PascalCase** for public, internal, protected, and protected internal members:
+
+```csharp
+public class GameplayScreen
+{
+    public int CurrentCombo { get; set; }
+    protected void UpdateScore() { }
+    public string PlayerName;
+}
+```
+
+<Note>
+Violating this rule will produce an **error** during build.
+</Note>
+
+### Private Members
+
+**Use camelCase** for private properties, methods, fields, and events:
+
+```csharp
+private int currentScore;
+private string userName;
+private void calculateTotal() { }
+```
+
+### Local Functions
+
+**Use camelCase** for local functions:
+
+```csharp
+public void ProcessData()
+{
+    int result = calculateSum();
+    
+    int calculateSum()
+    {
+        return 42;
+    }
+}
+```
+
+### Constants and Static Readonly Fields
+
+**Private constants and static readonly fields** use `all_lower` with underscores:
+
+```csharp
+private const int max_combo = 1000;
+private static readonly string default_player_name = "Guest";
+```
+
+**Public constants and static readonly fields** use `ALL_UPPER` with underscores:
+
+```csharp
+public const int MAX_PLAYERS = 16;
+public static readonly string DEFAULT_RULESET = "osu";
+```
+
+## Code Formatting
+
+### Indentation
+
+```csharp
+switch (value)
+{
+    case 1:
+        DoSomething();
+        break;
+    case 2:
+    {
+        // Block content is not indented relative to case
+        DoSomethingElse();
+        break;
+    }
+    default:
+        DoDefault();
+        break;
+}
+```
+
+<Accordion title="Indentation Rules">
+  - Case contents are indented
+  - Case contents when using blocks are not indented
+  - Labels are indented one less than current
+  - Switch labels are indented
+</Accordion>
+
+### New Lines and Braces
+
+**Open braces on new lines** (Allman style):
+
+```csharp
+public void Method()
+{
+    if (condition)
+    {
+        DoSomething();
+    }
+    else
+    {
+        DoSomethingElse();
+    }
+}
+
+public class MyClass
+{
+    // Class content
+}
+```
+
+**Control flow keywords** require new lines:
+
+```csharp
+try
+{
+    DoSomething();
+}
+catch (Exception ex)
+{
+    Handle(ex);
+}
+finally
+{
+    Cleanup();
+}
+```
+
+### Spacing
+
+<Steps>
+  <Step title="After casts">
+    No space after cast:
+    ```csharp
+    int value = (int)someDouble;
+    ```
+  </Step>
+  
+  <Step title="In inheritance clauses">
+    Space before and after colons:
+    ```csharp
+    public class Derived : BaseClass
+    ```
+  </Step>
+  
+  <Step title="Control flow statements">
+    Space after keywords:
+    ```csharp
+    if (condition)
+    while (running)
+    for (int i = 0; i < 10; i++)
+    ```
+  </Step>
+  
+  <Step title="Method declarations and calls">
+    No space between method name and opening parenthesis:
+    ```csharp
+    public void MethodName(int param)
+    MethodName(42);
+    ```
+  </Step>
+</Steps>
+
+### Using Directives
+
+```csharp
+using System;
+using System.Collections.Generic;
+using osu.Framework.Graphics;
+using osu.Game.Rulesets;
+```
+
+<Note>
+System directives are sorted first, followed by other namespaces in alphabetical order.
+</Note>
+
+## C# Language Styles
+
+### this. Qualification
+
+**Do not use `this.`** qualification unless absolutely necessary:
+
+```csharp
+// Good
+int value = someField;
+SomeMethod();
+
+// Bad
+int value = this.someField;
+this.SomeMethod();
+```
+
+### Type Names
+
+**Use predefined type names** for locals, parameters, and members:
+
+```csharp
+// Good
+int count = 0;
+string name = "player";
+
+// Bad
+Int32 count = 0;
+String name = "player";
+```
+
+### var Usage
+
+<Accordion title="var Guidelines">
+  **Use `var` when type is apparent:**
+  ```csharp
+  var player = new Player();
+  var score = GetScore();
+  ```
+  
+  **Do not use `var` for built-in types:**
+  ```csharp
+  // Good
+  int count = 5;
+  string name = "test";
+  
+  // Bad
+  var count = 5;
+  var name = "test";
+  ```
+  
+  **Use `var` elsewhere (silent suggestion):**
+  ```csharp
+  var result = CalculateComplexValue();
+  ```
+</Accordion>
+
+### Expression Bodies
+
+**Use expression bodies** for:
+- Accessors (warning level)
+- Indexers (warning level)
+- Operators (warning level)
+- Properties (warning level)
+- Local functions (silent suggestion)
+
+```csharp
+public int Value => backingField;
+public string Name
+{
+    get => name;
+    set => name = value;
+}
+public static int operator +(MyClass a, MyClass b) => a.Value + b.Value;
+```
+
+**Do not use expression bodies** for:
+- Constructors
+- Methods (silent suggestion)
+
+```csharp
+public void ComplexMethod()
+{
+    // Multiple statements
+    DoSomething();
+    DoSomethingElse();
+}
+```
+
+### Pattern Matching
+
+**Prefer pattern matching** over traditional type checks:
+
+```csharp
+// Good
+if (obj is Player player)
+{
+    player.UpdateScore();
+}
+
+// Avoid
+if (obj is Player)
+{
+    Player player = (Player)obj;
+    player.UpdateScore();
+}
+```
+
+### Null Checking
+
+**Use null-coalescing and null-propagation operators:**
+
+```csharp
+// Null-coalescing
+string name = player?.Name ?? "Unknown";
+
+// Null-propagation
+player?.UpdateScore();
+
+// Null-coalescing assignment
+playerName ??= "Guest";
+```
+
+### Modern C# Features
+
+<Accordion title="C# Feature Preferences">
+  **Prefer:**
+  - Object initializers (warning)
+  - Collection initializers (warning)
+  - Inferred tuple names (warning)
+  - Inferred anonymous type member names (warning)
+  - Auto-properties (warning)
+  - Compound assignments (warning)
+  - Static local functions (warning)
+  - Simple using statements (silent)
+  
+  **Avoid:**
+  - Index operator `^` (silent)
+  - Range operator `..` (silent)
+  - Switch expressions (none)
+  - Primary constructors (avoid)
+</Accordion>
+
+### Namespace Declarations
+
+**Use block-scoped namespaces:**
+
+```csharp
+namespace osu.Game.Screens.Menu
+{
+    public class MainMenu
+    {
+        // Class content
+    }
+}
+```
+
+<Warning>
+File-scoped namespaces are not used in this project.
+</Warning>
+
+## Code Analysis Tools
+
+The project uses multiple tools to enforce code style and quality.
+
+### Running Code Analysis
+
+<Steps>
+  <Step title="Restore tools">
+    ```bash
+    dotnet tool restore
+    ```
+  </Step>
+  
+  <Step title="Run file sanity checks">
+    ```bash
+    dotnet CodeFileSanity
+    ```
+  </Step>
+  
+  <Step title="Run InspectCode">
+    ```bash
+    # Linux/macOS
+    ./InspectCode.sh
+    
+    # Windows
+    .\InspectCode.ps1
+    ```
+    
+    This runs JetBrains InspectCode and generates a report at `inspectcodereport.xml`.
+  </Step>
+  
+  <Step title="Check for warnings">
+    ```bash
+    dotnet nvika parsereport inspectcodereport.xml --treatwarningsaserrors
+    ```
+    
+    This parses the report and treats warnings as errors.
+  </Step>
+</Steps>
+
+### dotnet format
+
+You can also use `dotnet format` to automatically fix formatting issues:
+
+```bash
+dotnet format
+```
+
+<Note>
+Run code analysis before submitting any pull request. This is especially important for first-time contributors, as CI will not run automatically until a maintainer approves it.
+</Note>
+
+## Modifier Order
+
+Modifiers should appear in the following order:
+
+```
+public, private, protected, internal, new, abstract, virtual, sealed, override, static, readonly, extern, unsafe, volatile, async
+```
+
+**Example:**
+
+```csharp
+public static readonly string DEFAULT_NAME = "osu!";
+protected virtual void OnUpdate() { }
+private async Task LoadDataAsync() { }
+```

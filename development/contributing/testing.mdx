@@ -1,0 +1,365 @@
+---
+title: Testing
+description: Testing methodology and guidelines for osu! development
+---
+
+osu! uses a unique visual testing methodology that allows developers to see and interact with their code in real-time. This approach is particularly effective for a game where visual feedback is crucial.
+
+## Visual Testing Overview
+
+<Note>
+The visual testing methodology is described in detail in the [osu-framework wiki](https://github.com/ppy/osu-framework/wiki/Development-and-Testing).
+</Note>
+
+Visual tests in osu! are interactive test scenes that:
+- Render UI components in real-time
+- Allow manual interaction and inspection
+- Can be automated with test steps
+- Provide immediate visual feedback during development
+
+### Benefits of Visual Testing
+
+<Accordion title="Why Visual Tests?">
+  - **Immediate feedback** - See your changes instantly without rebuilding the entire game
+  - **Isolated testing** - Test individual components in isolation
+  - **Interactive debugging** - Interact with components to test different states
+  - **Regression prevention** - Catch visual regressions before they reach production
+  - **Documentation** - Tests serve as examples of how components should be used
+</Accordion>
+
+## Test Structure
+
+Visual tests inherit from test scene base classes and use NUnit attributes.
+
+### Basic Test Example
+
+```csharp
+// Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
+// See the LICENCE file in the repository root for full licence text.
+
+using NUnit.Framework;
+using osu.Framework.Graphics;
+using osu.Game.Screens.Menu;
+using osuTK;
+
+namespace osu.Game.Tests.Visual.UserInterface
+{
+    public partial class TestSceneOsuLogo : OsuTestScene
+    {
+        private OsuLogo? logo;
+        private float scale = 1;
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            AddSliderStep("scale", 0.1, 2, 1, scale =>
+            {
+                if (logo != null)
+                    Child.Scale = new Vector2(this.scale = (float)scale);
+            });
+        }
+
+        [Test]
+        public void TestBasic()
+        {
+            AddStep("Add logo", () =>
+            {
+                Child = logo = new OsuLogo
+                {
+                    Anchor = Anchor.Centre,
+                    Origin = Anchor.Centre,
+                    Scale = new Vector2(scale),
+                };
+            });
+        }
+    }
+}
+```
+
+### Key Components
+
+<Steps>
+  <Step title="Test Scene Base Class">
+    Tests inherit from base classes like:
+    - `OsuTestScene` - For basic component tests
+    - `ScreenTestScene` - For testing full screens
+    - `OsuManualInputManagerTestScene` - For tests requiring input control
+    - `OsuGameTestScene` - For tests requiring the full game context
+  </Step>
+  
+  <Step title="NUnit Attributes">
+    Use standard NUnit attributes:
+    - `[Test]` - Marks a test method
+    - `[TestFixture]` - Marks a test class
+    - `[SetUpSteps]` - Setup steps that run before each test
+    - `[BackgroundDependencyLoader]` - Dependency injection
+  </Step>
+  
+  <Step title="Test Steps">
+    Use AddStep methods to create interactive test sequences:
+    - `AddStep()` - Add a named step
+    - `AddSliderStep()` - Add an interactive slider
+    - `AddToggleStep()` - Add a toggle checkbox
+    - `AddAssert()` - Add an assertion
+    - `AddUntilStep()` - Wait until condition is met
+  </Step>
+</Steps>
+
+## Common Test Patterns
+
+### Testing a Complex Overlay
+
+```csharp
+public partial class TestSceneModSelectOverlay : ScreenTestScene
+{
+    protected override bool UseFreshStoragePerRun => true;
+
+    private RulesetStore rulesetStore = null!;
+    private TestModSelectOverlayScreen screen = null!;
+
+    [Resolved]
+    private OsuConfigManager configManager { get; set; } = null!;
+
+    private ModSelectOverlay modSelectOverlay => screen.Overlay;
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Dependencies.Cache(rulesetStore = new RealmRulesetStore(Realm));
+        Dependencies.Cache(Realm);
+    }
+
+    [SetUpSteps]
+    public override void SetUpSteps()
+    {
+        base.SetUpSteps();
+
+        AddStep("reset ruleset", () => Ruleset.Value = rulesetStore.GetRuleset(0));
+        AddStep("reset mods", () => SelectedMods.SetDefault());
+        AddStep("reset config", () => configManager.SetValue(OsuSetting.ModSelectTextSearchStartsActive, true));
+        AddStep("set beatmap", () => Beatmap.Value = CreateWorkingBeatmap(new OsuRuleset().RulesetInfo));
+    }
+
+    [Test]
+    public void TestBasicOperation()
+    {
+        AddStep("show overlay", () => modSelectOverlay.Show());
+        AddAssert("overlay is visible", () => modSelectOverlay.State.Value == Visibility.Visible);
+    }
+}
+```
+
+### Key Patterns
+
+<Accordion title="Test Pattern Best Practices">
+  **1. Use SetUpSteps for common setup:**
+  ```csharp
+  [SetUpSteps]
+  public override void SetUpSteps()
+  {
+      base.SetUpSteps();
+      AddStep("reset state", () => ResetState());
+      AddStep("create component", () => CreateComponent());
+  }
+  ```
+  
+  **2. Use descriptive step names:**
+  ```csharp
+  AddStep("select hard rock mod", () => SelectMod<OsuModHardRock>());
+  AddStep("enable nightcore", () => EnableNightcore());
+  ```
+  
+  **3. Use AddAssert for validation:**
+  ```csharp
+  AddAssert("score is correct", () => scoreDisplay.Current.Value == 1000);
+  AddAssert("mod is selected", () => SelectedMods.Value.Any(m => m is OsuModDoubleTime));
+  ```
+  
+  **4. Use AddUntilStep for async operations:**
+  ```csharp
+  AddUntilStep("wait for load", () => component.IsLoaded);
+  AddUntilStep("wait for animation", () => !sprite.IsTransforming);
+  ```
+  
+  **5. Use AddSliderStep for interactive testing:**
+  ```csharp
+  AddSliderStep("adjust opacity", 0, 1, 1, opacity =>
+  {
+      component.Alpha = (float)opacity;
+  });
+  ```
+</Accordion>
+
+## Test Coverage Expectations
+
+<Warning>
+We expect most new features and bugfixes to have test coverage, unless the effort of adding them is prohibitive.
+</Warning>
+
+### What to Test
+
+<Steps>
+  <Step title="New UI components">
+    All new UI components should have visual tests that demonstrate:
+    - Basic rendering and layout
+    - Different states (enabled, disabled, selected, etc.)
+    - User interactions (click, hover, drag, etc.)
+    - Edge cases and boundary conditions
+  </Step>
+  
+  <Step title="Bug fixes">
+    When fixing a bug:
+    - Add a test that reproduces the bug
+    - Verify the test fails before the fix
+    - Verify the test passes after the fix
+  </Step>
+  
+  <Step title="Game mechanics">
+    For gameplay features:
+    - Test scoring calculations
+    - Test mod interactions
+    - Test input handling
+    - Test visual feedback
+  </Step>
+  
+  <Step title="Overlays and screens">
+    For complex screens:
+    - Test opening and closing
+    - Test state transitions
+    - Test data loading
+    - Test user workflows
+  </Step>
+</Steps>
+
+## Running Tests
+
+### Running All Tests
+
+```bash
+dotnet test
+```
+
+### Running Specific Tests
+
+```bash
+# Run a specific test fixture
+dotnet test --filter "FullyQualifiedName~TestSceneOsuLogo"
+
+# Run a specific test method
+dotnet test --filter "FullyQualifiedName~TestSceneOsuLogo.TestBasic"
+```
+
+### Running Tests in Visual Mode
+
+<Note>
+The most effective way to run visual tests is through the visual test runner, which allows you to see and interact with tests in real-time.
+</Note>
+
+<Steps>
+  <Step title="Build the test project">
+    ```bash
+    dotnet build osu.Game.Tests
+    ```
+  </Step>
+  
+  <Step title="Run the test browser">
+    Execute the test browser application to see an interactive list of all available tests.
+  </Step>
+  
+  <Step title="Select and run tests">
+    Navigate through the test tree and select individual tests to run them interactively.
+  </Step>
+  
+  <Step title="Interact with test steps">
+    Use the step buttons to advance through test scenarios and inspect the visual results.
+  </Step>
+</Steps>
+
+## Test Organization
+
+### Directory Structure
+
+```
+osu.Game.Tests/
+├── Visual/              # Visual tests
+│   ├── UserInterface/   # UI component tests
+│   ├── Gameplay/        # Gameplay tests
+│   ├── Menus/          # Menu and navigation tests
+│   ├── Online/         # Online functionality tests
+│   └── Settings/       # Settings tests
+├── NonVisual/          # Non-visual unit tests
+├── Database/           # Database tests
+└── Resources/          # Test resources
+```
+
+### Naming Conventions
+
+<Accordion title="Test Naming Guidelines">
+  **Test class names:**
+  - Prefix with `TestScene` for visual tests: `TestSceneOsuLogo`
+  - Suffix with `Test` for unit tests: `BeatmapConversionTest`
+  
+  **Test method names:**
+  - Use descriptive names that explain what is being tested: `TestBasicRendering`
+  - Use `Test` prefix: `TestModSelection`
+  
+  **Test step names:**
+  - Use clear, action-oriented descriptions: "select hard rock mod"
+  - Keep them concise but descriptive: "wait for load complete"
+</Accordion>
+
+## Debugging Tests
+
+### Using Assertions
+
+```csharp
+AddAssert("score is positive", () => score.Value > 0);
+AddAssert("combo is maintained", () => combo.Value == expectedCombo);
+AddAssert("mod is applied", () => SelectedMods.Value.Any(m => m is OsuModHidden));
+```
+
+### Waiting for Conditions
+
+```csharp
+// Wait up to 10 seconds for condition
+AddUntilStep("wait for score display", () => scoreDisplay.IsPresent);
+
+// Wait for multiple conditions
+AddUntilStep("wait for ready", () => 
+    component.IsLoaded && 
+    !component.IsTransforming &&
+    component.Alpha == 1
+);
+```
+
+### Inspecting State
+
+```csharp
+AddStep("print current state", () =>
+{
+    Console.WriteLine($"Score: {score.Value}");
+    Console.WriteLine($"Combo: {combo.Value}");
+    Console.WriteLine($"Mods: {string.Join(", ", SelectedMods.Value)}");
+});
+```
+
+## Before Submitting PRs
+
+<Warning>
+**Always run tests and code analysis before submitting a pull request:**
+
+```bash
+# Run tests
+dotnet test
+
+# Run code analysis
+./InspectCode.sh  # or .ps1 on Windows
+```
+
+This is especially important for first-time contributors, as CI will not run automatically until approved by a maintainer.
+</Warning>
+
+<Note>
+Tests are a critical part of the development workflow. They help ensure code quality, prevent regressions, and serve as living documentation for how components should be used.
+</Note>

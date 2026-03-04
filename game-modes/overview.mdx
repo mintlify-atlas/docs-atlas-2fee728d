@@ -1,0 +1,159 @@
+---
+title: Game Modes Overview
+description: An overview of osu!'s four unique game modes and the ruleset system
+---
+
+osu! features four distinct game modes, each offering a unique rhythm gaming experience. All modes share the same beatmap format but interpret the hit objects differently through the **ruleset system**.
+
+## The Four Game Modes
+
+<CardGroup cols={2}>
+  <Card title="osu!standard" icon="circle" href="/game-modes/osu-standard">
+    Click circles, follow sliders, and spin spinners with mouse precision
+  </Card>
+  <Card title="osu!taiko" icon="drum" href="/game-modes/taiko">
+    Hit the drum to the beat with centre and rim notes
+  </Card>
+  <Card title="osu!catch" icon="apple-whole" href="/game-modes/catch">
+    Catch falling fruits with a moving catcher
+  </Card>
+  <Card title="osu!mania" icon="grip-vertical" href="/game-modes/mania">
+    Press keys in a vertical scrolling playfield
+  </Card>
+</CardGroup>
+
+## Ruleset Architecture
+
+Each game mode is implemented as a **Ruleset** - a self-contained system that defines:
+
+- **Hit Objects**: The gameplay elements (circles, sliders, notes, etc.)
+- **Scoring System**: How performance is evaluated
+- **Difficulty Calculation**: Star rating and performance points
+- **Input Handling**: Controls and key bindings
+- **Visual Presentation**: Skinning and UI elements
+
+### Base Ruleset Class
+
+All game modes inherit from the base `Ruleset` class located in `osu.Game/Rulesets/Ruleset.cs`:
+
+```csharp
+public abstract class Ruleset
+{
+    public abstract DrawableRuleset CreateDrawableRulesetWith(IBeatmap beatmap, IReadOnlyList<Mod>? mods = null);
+    public abstract ScoreProcessor CreateScoreProcessor();
+    public abstract HealthProcessor CreateHealthProcessor(double drainStartTime);
+    public abstract IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap);
+    public abstract DifficultyCalculator CreateDifficultyCalculator(IWorkingBeatmap beatmap);
+    public abstract PerformanceCalculator CreatePerformanceCalculator();
+}
+```
+
+## Ruleset Locations
+
+Each game mode has its own dedicated namespace:
+
+| Mode | Namespace | Short Name | Legacy ID |
+|------|-----------|------------|----------|
+| osu!standard | `osu.Game.Rulesets.Osu` | `osu` | 0 |
+| osu!taiko | `osu.Game.Rulesets.Taiko` | `taiko` | 1 |
+| osu!catch | `osu.Game.Rulesets.Catch` | `fruits` | 2 |
+| osu!mania | `osu.Game.Rulesets.Mania` | `mania` | 3 |
+
+<Info>
+The short name is used in file paths, API endpoints, and internal references throughout the codebase.
+</Info>
+
+## Common Components
+
+### Hit Objects
+
+All hit objects inherit from `HitObject` and implement game mode-specific behavior:
+
+```csharp
+public abstract class HitObject
+{
+    public double StartTime { get; set; }
+    public IList<HitSampleInfo> Samples { get; }
+    public abstract Judgement CreateJudgement();
+    protected abstract HitWindows CreateHitWindows();
+}
+```
+
+### Judgements
+
+Judgements determine scoring results:
+
+- **Great/Perfect**: Full points
+- **Good/Ok**: Reduced points
+- **Meh**: Minimal points
+- **Miss**: No points, breaks combo
+
+### Mods
+
+All game modes support mods that alter gameplay:
+
+- **Difficulty Reduction**: Easy, No Fail, Half Time
+- **Difficulty Increase**: Hard Rock, Sudden Death, Double Time, Hidden, Flashlight
+- **Conversion**: Mode-specific gameplay modifiers
+- **Automation**: Auto, Relax, Autopilot (mode-dependent)
+- **Fun**: Visual and audio effects
+
+## Beatmap Conversion
+
+Beatmaps are created for one mode but can be played in others through **beatmap conversion**:
+
+```csharp
+public override IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap) 
+    => new OsuBeatmapConverter(beatmap, this);
+```
+
+Each ruleset's converter transforms hit objects:
+- Circles → Mode-specific single hit objects
+- Sliders → Mode-specific sustained/stream objects
+- Spinners → Mode-specific bonus/special objects
+
+<Tip>
+Native beatmaps (created specifically for a mode) generally provide better gameplay experiences than converted beatmaps.
+</Tip>
+
+## Hit Windows and Timing
+
+Each mode defines timing windows for judgements based on Overall Difficulty (OD):
+
+```csharp
+protected override HitWindows CreateHitWindows() => new OsuHitWindows();
+```
+
+Hit windows typically use difficulty ranges:
+- **OD 0**: Most lenient timing (largest windows)
+- **OD 5**: Medium timing
+- **OD 10**: Strictest timing (smallest windows)
+
+## Difficulty Calculation
+
+Each mode implements its own difficulty calculator that evaluates:
+
+1. **Aim/Reading Skills** (varies by mode)
+2. **Rhythm Complexity**
+3. **Pattern Difficulty**
+4. **Speed Requirements**
+
+The result is a **star rating** (0-10+ stars) and performance points (pp) system.
+
+## Performance Metrics
+
+All modes track:
+- **Score**: Total points earned
+- **Accuracy**: Percentage of perfect hits
+- **Combo**: Consecutive hits without missing
+- **Rank**: Letter grade (SS, S, A, B, C, D)
+- **Performance Points**: Skill-based rating
+
+## Next Steps
+
+Explore each game mode in detail:
+
+- [osu!standard](/game-modes/osu-standard) - The original click-the-circles mode
+- [osu!taiko](/game-modes/taiko) - Drum-based rhythm gameplay
+- [osu!catch](/game-modes/catch) - Fruit catching gameplay
+- [osu!mania](/game-modes/mania) - Vertical scrolling rhythm game

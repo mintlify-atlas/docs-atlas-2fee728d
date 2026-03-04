@@ -1,0 +1,138 @@
+---
+title: Leaderboards & Rankings
+description: Competitive leaderboards, score rankings, and performance tracking in osu!
+---
+
+The leaderboard system in osu! provides competitive score tracking across beatmaps, allowing players to compete globally and compare their performance with others.
+
+## Overview
+
+Leaderboards display scrolling lists of top scores for beatmaps, along with the player's personal best score. The system supports multiple scope types (global, country, friends) and automatically updates when new scores are submitted.
+
+<Info>
+Leaderboards refresh automatically when switching between online and offline modes, ensuring you always see the most current rankings.
+</Info>
+
+## Leaderboard States
+
+The leaderboard system manages several states to provide feedback to players:
+
+- **Success** - Scores loaded and displayed successfully
+- **Retrieving** - Currently fetching scores from the server
+- **NoScores** - No scores exist for this beatmap yet
+- **NetworkFailure** - Failed to retrieve scores from the server
+- **BeatmapUnavailable** - Leaderboards not available for this beatmap
+- **RulesetUnavailable** - Leaderboards not available for this game mode
+- **NoneSelected** - No beatmap selected
+- **NotLoggedIn** - Must sign in to view online leaderboards
+- **NotSupporter** - osu!supporter required for certain leaderboard types
+- **NoTeam** - Team-based leaderboards require team membership
+
+## Score Display
+
+Each leaderboard entry (`LeaderboardScore`) displays comprehensive score information:
+
+### Score Components
+
+<Card title="Player Information" icon="user">
+- Player avatar and username
+- Country flag and team flag (if applicable)
+- Friend highlighting (yellow background)
+- Personal score highlighting (green background for local user)
+</Card>
+
+<Card title="Score Statistics" icon="chart-bar">
+- **Total Score** - Displayed with glowing effect
+- **Rank** - Score grade (F, D, C, B, A, S, SH, X, XH)
+- **Combo** - Maximum combo achieved
+- **Accuracy** - Display accuracy percentage
+- **Mods** - Applied modifications with icons
+- **Date** - When the score was set (relative time)
+</Card>
+
+### Ranking Tiers
+
+Players are organized into ranking tiers based on performance:
+
+- Iron
+- Bronze
+- Silver
+- Gold
+- Platinum
+- Rhodium
+- Radiant
+- Lustrous
+
+## Score Ranks
+
+Scores receive letter grades based on performance:
+
+- **XH / X** - Silver/Gold SS (100% accuracy)
+- **SH / S** - Silver/Gold S (≥95% accuracy)
+- **A** - ≥90% accuracy
+- **B** - ≥80% accuracy
+- **C** - ≥70% accuracy
+- **D** - ≥60% accuracy
+- **F** - Failed
+
+<Tip>
+The H variants (SH, XH) are awarded when achieving high accuracy with the Hidden, Flashlight, or Fade In mods.
+</Tip>
+
+## User Top Score
+
+Below the main leaderboard, players can see their personal best score for the current beatmap. This "user top score" is always visible even if it doesn't appear in the top rankings.
+
+## Context Menu Actions
+
+Right-clicking on leaderboard scores provides quick actions:
+
+<Card title="Available Actions" icon="mouse-pointer">
+- **Use these mods** - Copy the mods from the selected score
+- **Copy Link** - Copy the score URL to clipboard (online scores only)
+- **Export** - Export the score to a file (local scores)
+- **Delete** - Remove the score (local scores only)
+</Card>
+
+## Implementation Details
+
+The leaderboard system is implemented in `osu.Game/Online/Leaderboards/`:
+
+- `Leaderboard.cs:34` - Main leaderboard component with scrolling score list
+- `LeaderboardScore.cs:42` - Individual score display with animations
+- `LeaderboardState.cs:6` - State management enumeration
+- `UpdateableRank.cs:12` - Animated rank display component
+
+### Automatic Refetching
+
+Leaderboards automatically refetch scores when:
+- API connectivity state changes (online/offline)
+- The selected beatmap changes
+- The leaderboard scope changes
+- Returning to a previously viewed beatmap
+
+<Info>
+The leaderboard uses a cancellation token system to prevent race conditions when rapidly switching between beatmaps.
+</Info>
+
+## Visual Effects
+
+The leaderboard includes several visual enhancements:
+
+- **Fade animations** - Scores fade in with staggered delays (50ms between entries)
+- **Entry animations** - Scores slide in from below with easing
+- **Hover effects** - Background brightens on mouse hover
+- **Score highlighting** - Different colors for friends and personal scores
+- **Gradient fading** - Smooth opacity transitions at scroll boundaries
+
+## Performance Optimization
+
+<Tip>
+The leaderboard limits score history to prevent performance issues. Only the most recent scores are kept in memory, with older scores automatically purged.
+</Tip>
+
+Leaderboards use asynchronous loading with cancellation tokens to ensure:
+- Smooth scrolling performance
+- Responsive UI during network requests
+- Proper cleanup when switching beatmaps
+- No memory leaks from abandoned requests

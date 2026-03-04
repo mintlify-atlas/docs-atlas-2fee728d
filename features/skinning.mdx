@@ -1,0 +1,516 @@
+---
+title: Skinning System
+description: Customizable visual and audio theming system for osu!
+---
+
+The skinning system allows complete visual and audio customization of the game. Users can create custom skins or download community-made skins to personalize their experience.
+
+## Skin Interface
+
+The `ISkin` interface defines what a skin can provide:
+
+```csharp
+public interface ISkin
+{
+    Drawable? GetDrawableComponent(ISkinComponentLookup lookup);
+    Texture? GetTexture(string componentName);
+    Texture? GetTexture(string componentName, WrapMode wrapModeS, WrapMode wrapModeT);
+    ISample? GetSample(ISampleInfo sampleInfo);
+    IBindable<TValue>? GetConfig<TLookup, TValue>(TLookup lookup);
+}
+```
+
+### Skin Resources
+
+<Accordion title="What Skins Can Provide">
+  <AccordionItem title="Visual Components">
+    Drawable UI elements and gameplay components:
+    
+    ```csharp
+    Drawable? GetDrawableComponent(ISkinComponentLookup lookup)
+    ```
+    
+    Examples:
+    - Hit circles
+    - Sliders
+    - Score displays
+    - Health bars
+    - Combo counters
+  </AccordionItem>
+  
+  <AccordionItem title="Textures">
+    Image assets for various game elements:
+    
+    ```csharp
+    Texture? GetTexture(string componentName)
+    ```
+    
+    Examples:
+    - `hitcircle.png`
+    - `sliderb0.png`
+    - `cursor.png`
+    - `menu-background.jpg`
+  </AccordionItem>
+  
+  <AccordionItem title="Audio Samples">
+    Sound effects:
+    
+    ```csharp
+    ISample? GetSample(ISampleInfo sampleInfo)
+    ```
+    
+    Examples:
+    - Hit sounds (normal, whistle, finish, clap)
+    - Menu sounds
+    - Combo break sound
+  </AccordionItem>
+  
+  <AccordionItem title="Configuration Values">
+    Skin-specific settings:
+    
+    ```csharp
+    IBindable<TValue>? GetConfig<TLookup, TValue>(TLookup lookup)
+    ```
+    
+    Examples:
+    - Colors (combo colors, menu colors)
+    - Fonts
+    - Layout preferences
+  </AccordionItem>
+</Accordion>
+
+## Built-in Skins
+
+osu! includes several official skins:
+
+<Card title="Default Skins" icon="palette">
+  <Accordion>
+    <AccordionItem title="Argon">
+      Modern default skin with clean visuals.
+      
+      ```csharp
+      public class ArgonSkin : Skin
+      {
+          public static SkinInfo CreateInfo() => new SkinInfo
+          {
+              ID = SkinInfo.ARGON_SKIN,
+              Name = "osu! (argon)",
+              Creator = "team osu!",
+              Protected = true,
+          };
+      }
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Argon Pro">
+      Professional variant of Argon with refined aesthetics.
+      
+      ```csharp
+      public class ArgonProSkin : ArgonSkin
+      {
+          // Enhanced version of Argon
+      }
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Triangles">
+      Geometric-themed skin.
+      
+      ```csharp
+      ID = SkinInfo.TRIANGLES_SKIN
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Classic">
+      Traditional osu! skin (osu!stable style).
+      
+      ```csharp
+      public class DefaultLegacySkin : LegacySkin
+      {
+          ID = SkinInfo.CLASSIC_SKIN
+      }
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Retro">
+      Nostalgic retro-styled skin.
+      
+      ```csharp
+      ID = SkinInfo.RETRO_SKIN
+      ```
+    </AccordionItem>
+  </Accordion>
+</Card>
+
+## Skin Manager
+
+The `SkinManager` handles skin operations:
+
+```csharp
+public class SkinManager : ModelManager<SkinInfo>, ISkinSource, IModelImporter<SkinInfo>
+{
+    public readonly Bindable<Skin> CurrentSkin = new Bindable<Skin>();
+    public readonly Bindable<Live<SkinInfo>> CurrentSkinInfo;
+    public Skin DefaultClassicSkin { get; }
+}
+```
+
+### Current Skin Management
+
+<Steps>
+  <Step title="Set Current Skin">
+    Change the active skin:
+    
+    ```csharp
+    skinManager.CurrentSkinInfo.Value = skinInfo;
+    ```
+    
+    The `CurrentSkin` bindable updates automatically.
+  </Step>
+  
+  <Step title="Get Current Skin">
+    Access the current skin:
+    
+    ```csharp
+    Skin currentSkin = skinManager.CurrentSkin.Value;
+    ```
+  </Step>
+  
+  <Step title="Listen for Changes">
+    Subscribe to skin changes:
+    
+    ```csharp
+    skinManager.CurrentSkin.ValueChanged += skin =>
+    {
+        // Handle skin change
+    };
+    ```
+  </Step>
+</Steps>
+
+## Listing and Selection
+
+### Getting All Skins
+
+```csharp
+public IList<Live<SkinInfo>> GetAllUsableSkins()
+{
+    // Returns:
+    // 1. Default skins (Argon, Triangles, Classic, etc.)
+    // 2. Random skin option
+    // 3. User skins (alphabetically)
+}
+```
+
+<Card title="Skin List Order">
+1. Argon
+2. Argon Pro
+3. Triangles
+4. Classic
+5. Retro
+6. **< Random Skin >**
+7. User skins (A-Z)
+</Card>
+
+### Cycling Through Skins
+
+<Accordion title="Skin Navigation">
+  <AccordionItem title="Next Skin">
+    ```csharp
+    skinManager.SelectNextSkin();
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Previous Skin">
+    ```csharp
+    skinManager.SelectPreviousSkin();
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Random Skin">
+    ```csharp
+    skinManager.SelectRandomSkin();
+    ```
+    
+    Chooses a random skin, excluding the current one.
+  </AccordionItem>
+</Accordion>
+
+## Importing Skins
+
+Users can import custom skins:
+
+```csharp
+// Import from file paths
+await skinManager.Import("path/to/skin.osk");
+
+// Import with progress tracking
+await skinManager.Import(notification, tasks, parameters);
+```
+
+<Card title="Supported Formats">
+- `.osk` - osu! skin archive
+- Extracted skin folders
+- Legacy skin formats
+</Card>
+
+## Exporting Skins
+
+Skins can be exported for sharing:
+
+```csharp
+// Export current skin
+await skinManager.ExportCurrentSkin();
+
+// Export specific skin
+await skinManager.ExportSkin(skinInfo);
+```
+
+<Note>
+Exported skins are packaged as `.osk` files for easy sharing.
+</Note>
+
+## Editing Skins
+
+### Making Skins Mutable
+
+Protected skins (defaults) must be copied before editing:
+
+```csharp
+public bool EnsureMutableSkin()
+{
+    // If current skin is protected, creates a copy
+    // Returns true if a new skin was created
+}
+```
+
+<Steps>
+  <Step title="Check Protection">
+    Protected skins cannot be directly modified:
+    
+    ```csharp
+    if (skinInfo.Protected)
+    {
+        // Need to create a copy
+    }
+    ```
+  </Step>
+  
+  <Step title="Create Copy">
+    The system automatically creates a mutable copy:
+    
+    ```csharp
+    skinInfo.Name = $"{originalName} (modified)";
+    ```
+  </Step>
+  
+  <Step title="Save Changes">
+    Save modifications to the skin:
+    
+    ```csharp
+    skinManager.Save(skin);
+    ```
+  </Step>
+</Steps>
+
+### Saving Skins
+
+```csharp
+public bool Save(Skin skin)
+{
+    // Serializes skin changes to JSON
+    // Returns true if changes were made
+}
+```
+
+<Warning>
+Attempting to save an unmanaged skin throws an exception. Always call `EnsureMutableSkin()` first.
+</Warning>
+
+## External Editing
+
+Skins can be edited with external tools:
+
+```csharp
+public Task<ExternalEditOperation<SkinInfo>> BeginExternalEditing(SkinInfo skin)
+{
+    // Exports skin to temporary location for editing
+    // Watches for changes and re-imports when done
+}
+```
+
+## Skin Lookup System
+
+The skin manager implements `ISkinSource` for resource lookups:
+
+```csharp
+public Drawable GetDrawableComponent(ISkinComponentLookup lookup) => 
+    lookupWithFallback(s => s.GetDrawableComponent(lookup));
+
+public Texture GetTexture(string componentName, WrapMode wrapModeS, WrapMode wrapModeT) => 
+    lookupWithFallback(s => s.GetTexture(componentName, wrapModeS, wrapModeT));
+```
+
+### Fallback Chain
+
+<Card title="Resource Lookup Order">
+1. Current user skin
+2. Default Classic skin (if current is legacy)
+3. Triangles skin (final fallback)
+
+```csharp
+public IEnumerable<ISkin> AllSources
+{
+    get
+    {
+        yield return CurrentSkin.Value;
+        
+        if (CurrentSkin.Value is LegacySkin && CurrentSkin.Value != DefaultClassicSkin)
+            yield return DefaultClassicSkin;
+        
+        if (CurrentSkin.Value != trianglesSkin)
+            yield return trianglesSkin;
+    }
+}
+```
+</Card>
+
+<Note>
+This fallback system ensures that missing resources in user skins are filled in with defaults.
+</Note>
+
+## Skin Components
+
+Skins can provide custom UI components:
+
+<Accordion title="Skinnable Components">
+  <AccordionItem title="Text Elements">
+    ```csharp
+    public class TextElement : ISerialisableDrawable
+    {
+        public string Text { get; set; }
+        public FontUsage Font { get; set; }
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Player Name">
+    ```csharp
+    public class PlayerName : FontAdjustableSkinComponent
+    {
+        // Displays player username
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Beatmap Attributes">
+    ```csharp
+    public class BeatmapAttributeText : FontAdjustableSkinComponent
+    {
+        // Displays beatmap info (title, artist, etc.)
+    }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Judgement Counter">
+    ```csharp
+    public class ArgonJudgementCounter : ISkinComponent
+    {
+        // Shows hit statistics during gameplay
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Legacy Skin Support
+
+The system supports legacy osu!stable skins:
+
+<Card title="Legacy Features">
+```csharp
+public class LegacyBeatmapSkin : LegacySkin
+{
+    // Loads skin.ini configuration
+    // Supports classic hit sounds
+    // Handles legacy sprite layouts
+}
+```
+
+### Legacy Elements
+- **Combo Colors**: From `skin.ini`
+- **Hit Circle Overlays**: Classic overlays
+- **Legacy Fonts**: Bitmap fonts
+- **Classic Layouts**: Original positioning
+</Card>
+
+## Skin Colors
+
+Skins define global color schemes:
+
+```csharp
+public class GlobalSkinColours
+{
+    public static readonly Color4 Blue = Color4Extensions.FromHex("#1188ee");
+    public static readonly Color4 Pink = Color4Extensions.FromHex("#ee11dd");
+    public static readonly Color4 Purple = Color4Extensions.FromHex("#aa11ee");
+    // ... more colors
+}
+```
+
+## Beatmap Skins
+
+Beatmaps can include their own skins:
+
+```csharp
+public class BeatmapSkinProvidingContainer : SkinProvidingContainer
+{
+    // Provides beatmap-specific skin resources
+    // Falls back to user skin if resource not found
+}
+```
+
+<Note>
+Beatmap skins only override specific elements, allowing user skins to fill in the rest.
+</Note>
+
+## Skin Deletion
+
+Remove unwanted skins:
+
+```csharp
+// Delete with filter
+skinManager.Delete(s => s.Name.Contains("old"));
+
+// Delete specific skins
+skinManager.Delete(new[] { skinInfo }, silent: false);
+```
+
+<Warning>
+Protected skins (defaults) cannot be deleted. The filter automatically excludes them:
+
+```csharp
+var items = realm.All<SkinInfo>()
+    .Where(s => !s.Protected && !s.DeletePending);
+```
+</Warning>
+
+## Skin Renaming
+
+Rename existing skins:
+
+```csharp
+skinManager.Rename(skinInfo, "New Name");
+```
+
+This updates both the skin metadata and the `skin.ini` file.
+
+## Best Practices
+
+<Card title="Skinning Tips" icon="lightbulb">
+1. **Always check for null** when looking up skin resources
+2. **Use fallback chain** - don't assume resources exist
+3. **Test with multiple skins** - ensure compatibility
+4. **Respect user preferences** - don't force skin elements
+5. **Handle legacy skins** - support both modern and classic formats
+6. **Cache lookups** - skin resource retrieval can be expensive
+</Card>

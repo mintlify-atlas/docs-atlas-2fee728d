@@ -1,0 +1,554 @@
+---
+title: Input Handling System
+description: Input management, key bindings, and input processing architecture in osu!
+---
+
+The input handling system in osu! manages all user input from keyboards, mice, tablets, and touch screens. It provides a flexible key binding system and ensures input is processed correctly across different game modes and contexts.
+
+## Architecture Overview
+
+### Input Flow
+
+```
+OS Input Events
+    ↓
+OsuUserInputManager
+    ↓
+GlobalActionContainer (Global key bindings)
+    ↓
+Screen-specific InputManager
+    ↓
+Ruleset InputManager (Game mode key bindings)
+    ↓
+Playfield / Hit Objects
+```
+
+## Core Components
+
+### OsuUserInputManager
+
+The root input manager for the entire game.
+
+**Location**: `osu.Game/Input/OsuUserInputManager.cs:11`
+
+```csharp
+public partial class OsuUserInputManager : UserInputManager
+{
+    // Disable right-click context menu during gameplay
+    protected override bool AllowRightClickFromLongTouch 
+        => PlayingState.Value != LocalUserPlayingState.Playing;
+    
+    // Track playing state
+    public readonly IBindable<LocalUserPlayingState> PlayingState = new Bindable<LocalUserPlayingState>();
+    
+    protected override MouseButtonEventManager CreateButtonEventManagerFor(MouseButton button)
+    {
+        // Custom right-mouse behavior
+        if (button == MouseButton.Right)
+            return new RightMouseManager(button);
+        
+        return base.CreateButtonEventManagerFor(button);
+    }
+}
+```
+
+**Features:**
+- Manages all input devices
+- Custom mouse button handling
+- Touch input support
+- Playing state awareness
+- Right-click drag support for scrolling
+
+### GlobalActionContainer
+
+Handles global key bindings that work across all screens.
+
+**Location**: `osu.Game/Input/Bindings/GlobalActionContainer.cs:15`
+
+```csharp
+public partial class GlobalActionContainer : DatabasedKeyBindingContainer<GlobalAction>, 
+    IHandleGlobalKeyboardInput, IKeyBindingHandler<GlobalAction>
+{
+    // Priority over screen-specific bindings
+    protected override bool Prioritised => true;
+    
+    // All default bindings
+    public override IEnumerable<IKeyBinding> DefaultKeyBindings => 
+        globalKeyBindings
+        .Concat(editorKeyBindings)
+        .Concat(inGameKeyBindings)
+        .Concat(replayKeyBindings)
+        .Concat(songSelectKeyBindings)
+        .Concat(audioControlKeyBindings)
+        .Concat(overlayKeyBindings);
+}
+```
+
+<Card title="Global Action Categories" icon="keyboard">
+  - **General**: Navigation, selection (Space, Enter, Escape)
+  - **Overlays**: Settings, chat, notifications (Ctrl+O, F8, F9)
+  - **Editor**: Editor-specific shortcuts (F1-F4, Ctrl+Z/Y)
+  - **In-Game**: Pause, skip, retry (Space, Tilde, Ctrl+R)
+  - **Replay**: Playback control (Space, Left/Right arrows)
+  - **Song Select**: Beatmap selection (F1, F2, Delete)
+  - **Audio Control**: Volume, track control (Up/Down, Left/Right)
+</Card>
+
+### Example Global Key Bindings
+
+```csharp
+// General navigation
+new KeyBinding(InputKey.Up, GlobalAction.SelectPrevious),
+new KeyBinding(InputKey.Down, GlobalAction.SelectNext),
+new KeyBinding(InputKey.Enter, GlobalAction.Select),
+new KeyBinding(InputKey.Escape, GlobalAction.Back),
+
+// Overlays
+new KeyBinding(new[] { InputKey.Control, InputKey.O }, GlobalAction.ToggleSettings),
+new KeyBinding(InputKey.F8, GlobalAction.ToggleChat),
+new KeyBinding(InputKey.F6, GlobalAction.ToggleNowPlaying),
+
+// In-game
+new KeyBinding(InputKey.Space, GlobalAction.SkipCutscene),
+new KeyBinding(InputKey.Tilde, GlobalAction.QuickRetry),
+new KeyBinding(new[] { InputKey.Control, InputKey.R }, GlobalAction.QuickRetry),
+new KeyBinding(InputKey.Tab, GlobalAction.ToggleInGameLeaderboard),
+
+// Gameplay adjustments
+new KeyBinding(InputKey.Plus, GlobalAction.IncreaseOffset),
+new KeyBinding(InputKey.Minus, GlobalAction.DecreaseOffset),
+new KeyBinding(InputKey.F3, GlobalAction.DecreaseScrollSpeed),
+new KeyBinding(InputKey.F4, GlobalAction.IncreaseScrollSpeed),
+
+// Replay control
+new KeyBinding(InputKey.Space, GlobalAction.TogglePauseReplay),
+new KeyBinding(InputKey.Left, GlobalAction.SeekReplayBackward),
+new KeyBinding(InputKey.Right, GlobalAction.SeekReplayForward),
+```
+
+<Info>
+  Key bindings support **modifier combinations** (Ctrl, Shift, Alt) and multiple keys can be bound to the same action.
+</Info>
+
+## Key Binding Storage
+
+### RealmKeyBindingStore
+
+Manages persistent key binding storage in the Realm database.
+
+**Location**: `osu.Game/Input/RealmKeyBindingStore.cs:17`
+
+```csharp
+public class RealmKeyBindingStore
+{
+    private readonly RealmAccess realm;
+    private readonly ReadableKeyCombinationProvider keyCombinationProvider;
+    
+    // Get human-readable binding string
+    public LocalisableString GetBindingsStringFor(GlobalAction globalAction);
+    
+    // Get all key combinations for an action
+    public IReadOnlyList<string> GetReadableKeyCombinationsFor(GlobalAction globalAction);
+    
+    // Register default bindings
+    public void Register(KeyBindingContainer container, IEnumerable<RulesetInfo> rulesets);
+    
+    // Clear duplicate bindings
+    public static int ClearDuplicateBindings(IEnumerable<IKeyBinding> keyBindings);
+}
+```
+
+**Key Binding Registration:**
+
+```csharp
+public void Register(KeyBindingContainer container, IEnumerable<RulesetInfo> rulesets)
+{
+    realm.Run(r =>
+    {
+        using (var transaction = r.BeginWrite())
+        {
+            // Get existing bindings
+            var existingBindings = r.All<RealmKeyBinding>().ToList();
+            
+            // Insert defaults for global actions
+            insertDefaults(r, existingBindings, container.DefaultKeyBindings);
+            
+            // Insert defaults for each ruleset
+            foreach (var ruleset in rulesets)
+            {
+                var instance = ruleset.CreateInstance();
+                foreach (int variant in instance.AvailableVariants)
+                    insertDefaults(r, existingBindings, 
+                        instance.GetDefaultKeyBindings(variant), 
+                        ruleset.ShortName, variant);
+            }
+            
+            transaction.Commit();
+        }
+    });
+}
+```
+
+### RealmKeyBinding
+
+Database model for stored key bindings:
+
+```csharp
+public class RealmKeyBinding : RealmObject, IKeyBinding
+{
+    // The action this binding triggers
+    public int ActionInt { get; set; }
+    
+    // The key combination
+    public KeyCombination KeyCombination { get; set; }
+    
+    // Ruleset-specific binding (null for global)
+    public string RulesetName { get; set; }
+    
+    // Ruleset variant (e.g., mania key count)
+    public int? Variant { get; set; }
+}
+```
+
+## Ruleset-Specific Input
+
+Each game mode implements its own input handling:
+
+### Example: osu!standard Input
+
+```csharp
+public class OsuInputManager : RulesetInputManager<OsuAction>
+{
+    public OsuInputManager(RulesetInfo ruleset)
+        : base(ruleset, 0, SimultaneousBindingMode.Unique)
+    {
+    }
+}
+
+public enum OsuAction
+{
+    [Description("Left mouse button")]
+    LeftButton,
+    
+    [Description("Right mouse button")]
+    RightButton,
+    
+    // Smoke effect
+    Smoke,
+}
+
+// Default bindings
+public override IEnumerable<IKeyBinding> GetDefaultKeyBindings(int variant = 0) => new[]
+{
+    new KeyBinding(InputKey.Z, OsuAction.LeftButton),
+    new KeyBinding(InputKey.X, OsuAction.RightButton),
+    new KeyBinding(InputKey.MouseLeft, OsuAction.LeftButton),
+    new KeyBinding(InputKey.MouseRight, OsuAction.RightButton),
+    new KeyBinding(InputKey.C, OsuAction.Smoke),
+};
+```
+
+### Example: osu!mania Input
+
+```csharp
+public class ManiaInputManager : RulesetInputManager<ManiaAction>
+{
+    public ManiaInputManager(RulesetInfo ruleset, int variant)
+        : base(ruleset, variant, SimultaneousBindingMode.Unique)
+    {
+    }
+}
+
+public enum ManiaAction
+{
+    [Description("Key 1")]
+    Key1,
+    [Description("Key 2")]
+    Key2,
+    [Description("Key 3")]
+    Key3,
+    // ... up to Key18 for 18K
+    
+    Special1,
+    Special2,
+}
+
+// Default bindings vary by key count (variant)
+public override IEnumerable<IKeyBinding> GetDefaultKeyBindings(int variant = 0)
+{
+    switch (variant)
+    {
+        case 0: // 1K
+            return new[] { new KeyBinding(InputKey.Space, ManiaAction.Key1) };
+        
+        case 1: // 2K
+            return new[]
+            {
+                new KeyBinding(InputKey.F, ManiaAction.Key1),
+                new KeyBinding(InputKey.J, ManiaAction.Key2),
+            };
+        
+        case 3: // 4K
+            return new[]
+            {
+                new KeyBinding(InputKey.D, ManiaAction.Key1),
+                new KeyBinding(InputKey.F, ManiaAction.Key2),
+                new KeyBinding(InputKey.J, ManiaAction.Key3),
+                new KeyBinding(InputKey.K, ManiaAction.Key4),
+            };
+        
+        // ... more variants
+    }
+}
+```
+
+<Warning>
+  Ruleset key bindings are stored **per variant**. For osu!mania, each key count (4K, 5K, 6K, 7K, etc.) has separate bindings.
+</Warning>
+
+## Input Processing in Gameplay
+
+### DrawableRuleset Input Hierarchy
+
+```csharp
+DrawableRuleset
+└── FrameStabilityContainer
+    └── KeyBindingInputManager (Ruleset-specific)
+        └── PlayfieldAdjustmentContainer
+            └── Playfield
+                └── HitObjectContainer
+                    └── DrawableHitObject (receives input events)
+```
+
+### Hit Object Input Handling
+
+```csharp
+public abstract class DrawableHitObject : CompositeDrawable
+{
+    // Check if an action is valid for this hit object
+    public virtual bool OnPressed(KeyBindingPressEvent<TAction> e)
+    {
+        if (Judged) return false;
+        if (!e.Action.IsValidAction()) return false;
+        
+        // Process input and create judgement
+        ApplyResult(r => r.Type = CalculateJudgement());
+        return true;
+    }
+    
+    public virtual void OnReleased(KeyBindingReleaseEvent<TAction> e)
+    {
+        // Handle key release (for hold notes, sliders, etc.)
+    }
+}
+```
+
+## Touch Input
+
+### TouchInputInterceptor
+
+Converts touch events to game-specific actions:
+
+```csharp
+public partial class TouchInputInterceptor : Container
+{
+    protected override bool OnTouchDown(TouchDownEvent e)
+    {
+        // Convert touch to mouse click or game action
+        return base.OnTouchDown(e);
+    }
+    
+    protected override void OnTouchUp(TouchUpEvent e)
+    {
+        // Handle touch release
+        base.OnTouchUp(e);
+    }
+}
+```
+
+### PlayerTouchInputDetector
+
+Detects and manages touch input during gameplay:
+
+```csharp
+public partial class PlayerTouchInputDetector : Component
+{
+    // Detected whether touch input is being used
+    public IBindable<bool> TouchInputActive { get; }
+    
+    protected override bool OnTouchDown(TouchDownEvent e)
+    {
+        TouchInputActive.Value = true;
+        return base.OnTouchDown(e);
+    }
+}
+```
+
+## Input Validation
+
+### Banned Keys for Gameplay
+
+Some keys are not allowed for gameplay bindings:
+
+```csharp
+private static readonly IEnumerable<InputKey> banned_keys = new[]
+{
+    InputKey.MouseWheelDown,
+    InputKey.MouseWheelLeft,
+    InputKey.MouseWheelUp,
+    InputKey.MouseWheelRight
+};
+
+public static bool CheckValidForGameplay(KeyCombination combination)
+{
+    foreach (var key in banned_keys)
+    {
+        if (combination.Keys.Contains(key))
+            return false;
+    }
+    return true;
+}
+```
+
+<Info>
+  Mouse wheel inputs are banned because they can be spun infinitely, providing an unfair advantage.
+</Info>
+
+## Key Binding Customization
+
+### Key Binding Panel
+
+Users can customize key bindings through the settings:
+
+1. Open Settings (Ctrl+O)
+2. Navigate to Input → Key Bindings
+3. Select category (Global, or specific ruleset)
+4. Click on a binding to change it
+5. Press desired key combination
+6. Changes save automatically
+
+### Programmatic Binding Changes
+
+```csharp
+// Get current bindings for an action
+var bindings = keyBindingStore.GetReadableKeyCombinationsFor(GlobalAction.QuickRetry);
+
+// Modify a binding
+realm.Write(r =>
+{
+    var binding = r.All<RealmKeyBinding>()
+        .First(b => b.ActionInt == (int)GlobalAction.QuickRetry);
+    
+    binding.KeyCombination = new KeyCombination(InputKey.R);
+});
+
+// Clear duplicate bindings
+var clearedCount = RealmKeyBindingStore.ClearDuplicateBindings(allBindings);
+```
+
+## Idle Tracking
+
+### IdleTracker
+
+Detects when the user is inactive:
+
+```csharp
+public class IdleTracker : Component
+{
+    // Time until considered idle
+    public double TimeUntilIdle { get; set; } = 10000;
+    
+    // Is currently idle
+    public IBindable<bool> IsIdle { get; }
+    
+    protected override bool OnMouseMove(MouseMoveEvent e)
+    {
+        // Reset idle timer
+        resetIdleTime();
+        return base.OnMouseMove(e);
+    }
+    
+    protected override bool OnKeyDown(KeyDownEvent e)
+    {
+        // Reset idle timer
+        resetIdleTime();
+        return base.OnKeyDown(e);
+    }
+}
+```
+
+### GameIdleTracker
+
+Game-specific idle detection that respects gameplay state:
+
+```csharp
+public partial class GameIdleTracker : IdleTracker
+{
+    protected override bool OnKeyDown(KeyDownEvent e)
+    {
+        // Ignore certain keys for idle detection
+        if (e.Key == InputKey.F1 || e.Key == InputKey.F12)
+            return false;
+        
+        return base.OnKeyDown(e);
+    }
+}
+```
+
+## Mouse Confine Mode
+
+### ConfineMouseTracker
+
+Manages mouse cursor confinement to the game window:
+
+```csharp
+public enum OsuConfineMouseMode
+{
+    Never,           // Never confine
+    DuringGameplay,  // Confine during active gameplay
+    Fullscreen,      // Confine in fullscreen mode
+    Always           // Always confine
+}
+
+public partial class ConfineMouseTracker : Component
+{
+    private Bindable<OsuConfineMouseMode> confineMode;
+    
+    private void updateConfineMode()
+    {
+        bool confine = confineMode.Value switch
+        {
+            OsuConfineMouseMode.Never => false,
+            OsuConfineMouseMode.DuringGameplay => isPlaying,
+            OsuConfineMouseMode.Fullscreen => isFullscreen,
+            OsuConfineMouseMode.Always => true,
+            _ => false
+        };
+        
+        game.Window.ConfineMouseMode.Value = confine 
+            ? ConfineMouseMode.Always 
+            : ConfineMouseMode.Never;
+    }
+}
+```
+
+## Best Practices
+
+<Card title="Input Handling Guidelines" icon="check">
+  - Use **DatabasedKeyBindingContainer** for persistent bindings
+  - Implement **IKeyBindingHandler** for custom input logic
+  - Set appropriate **SimultaneousBindingMode** (Unique, All, None)
+  - Use **Prioritised** property for input precedence
+  - Validate key combinations before saving
+  - Provide **descriptions** for actions via attributes
+  - Handle **touch input** separately for mobile support
+  - Respect **OverlayActivation** mode in overlays
+</Card>
+
+## Related Systems
+
+- [Gameplay System](/development/systems/gameplay)
+- [UI Overlays](/development/systems/ui-overlays)
+- Replay System
+- Framework Input System
+- Dependency Injection

@@ -1,0 +1,433 @@
+---
+title: Online Play & Rooms
+description: Room-based online play system including playlists and matchmaking
+---
+
+The online play system provides a flexible room-based infrastructure for both casual playlists and competitive multiplayer. Rooms can be configured with various settings, playlists, and participation rules.
+
+## Room Structure
+
+Rooms are the foundation of online play, containing all the information about a play session:
+
+```csharp
+public partial class Room : INotifyPropertyChanged
+{
+    public long? RoomID { get; set; }
+    public string Name { get; set; }
+    public string? Password { get; set; }
+    public bool HasPassword { get; set; }
+    public APIUser? Host { get; set; }
+    public RoomCategory Category { get; set; }
+    public MatchType Type { get; set; }
+    public RoomStatus Status { get; set; }
+}
+```
+
+### Room Properties
+
+<Accordion title="Core Room Properties">
+  <AccordionItem title="Identity">
+    - **RoomID**: Online identifier (null until created)
+    - **Name**: Display name for the room
+    - **ChannelId**: Associated chat channel ID
+  </AccordionItem>
+  
+  <AccordionItem title="Access Control">
+    - **Password**: Room password (only set during creation)
+    - **HasPassword**: Indicates if password is required
+    - **Availability**: Who can join (public, friends only, etc.)
+    - **Pinned**: Whether the room appears at the top of listings
+  </AccordionItem>
+  
+  <AccordionItem title="Participants">
+    - **Host**: Room creator/host user
+    - **MaxParticipants**: Maximum allowed players
+    - **ParticipantCount**: Current number of players
+    - **RecentParticipants**: List of recent players
+  </AccordionItem>
+  
+  <AccordionItem title="Timing">
+    - **StartDate**: When the room was created
+    - **EndDate**: When the room will close
+    - **Duration**: How long the room stays open
+  </AccordionItem>
+</Accordion>
+
+<Note>
+The `Password` property is write-only after creation for security. Use `HasPassword` to check if a password is required.
+</Note>
+
+## Room Categories
+
+Rooms are organized into categories:
+
+<Card title="Room Categories" icon="folder">
+- **Normal**: Standard user-created rooms
+- **Spotlight**: Featured/promoted rooms
+- **Featured Artist**: Rooms featuring official content
+- **Lazer**: osu!lazer-specific rooms
+</Card>
+
+## Playlist System
+
+Rooms contain playlists of beatmaps to be played:
+
+```csharp
+public IReadOnlyList<PlaylistItem> Playlist { get; set; }
+```
+
+### Playlist Items
+
+Each playlist item represents a beatmap with specific settings:
+
+<Card title="PlaylistItem Properties">
+- **Beatmap**: The beatmap to be played
+- **RequiredMods**: Mods that all players must use
+- **AllowedMods**: Mods that players can optionally enable
+- **RulesetID**: Which game mode to use
+- **Expired**: Whether this item is no longer playable
+</Card>
+
+### Playlist Statistics
+
+Rooms track statistics about their playlists:
+
+```csharp
+public class RoomPlaylistItemStats
+{
+    public int CountActive { get; set; }  // Active items
+    public int CountTotal { get; set; }   // Total items
+    public int[] RulesetIDs { get; set; } // Game modes present
+}
+```
+
+### Difficulty Range
+
+The room displays its difficulty range:
+
+```csharp
+public class RoomDifficultyRange
+{
+    public double Min { get; set; }
+    public double Max { get; set; }
+}
+```
+
+<Note>
+This helps players quickly assess if a room matches their skill level.
+</Note>
+
+## Room Settings
+
+Different room types support different settings:
+
+### Playlist-Specific Settings
+
+<Card title="Playlist Room Settings">
+```csharp
+// Maximum attempts per player on each playlist item
+public int? MaxAttempts { get; set; }
+```
+
+Limiting attempts adds a challenge element to playlist rooms.
+</Card>
+
+### Multiplayer-Specific Settings
+
+<Accordion title="Multiplayer Room Settings">
+  <AccordionItem title="Queue Mode">
+    Controls who can add songs to the playlist:
+    
+    ```csharp
+    public QueueMode QueueMode { get; set; }
+    ```
+    
+    - Host Only
+    - All Players
+    - All Players (Round Robin)
+  </AccordionItem>
+  
+  <AccordionItem title="Auto-Start">
+    Automatically start matches after a delay:
+    
+    ```csharp
+    public TimeSpan AutoStartDuration { get; set; }
+    ```
+    
+    Set to zero to disable auto-start.
+  </AccordionItem>
+  
+  <AccordionItem title="Auto-Skip">
+    Automatically skip beatmap intros:
+    
+    ```csharp
+    public bool AutoSkip { get; set; }
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Creating and Managing Rooms
+
+### Creating a Room
+
+<Steps>
+  <Step title="Configure Room">
+    Set up basic room properties:
+    
+    ```csharp
+    var room = new Room
+    {
+        Name = "My Room",
+        Password = "secret123",
+        Type = MatchType.HeadToHead,
+        MaxParticipants = 16
+    };
+    ```
+  </Step>
+  
+  <Step title="Submit Creation Request">
+    Send the room configuration to the server:
+    
+    ```csharp
+    var request = new CreateRoomRequest(room);
+    ```
+  </Step>
+  
+  <Step title="Receive Room ID">
+    After creation, the server assigns a RoomID:
+    
+    ```csharp
+    room.RoomID // Now populated
+    ```
+  </Step>
+</Steps>
+
+### Joining a Room
+
+<Card title="Join Room Process">
+```csharp
+var joinRequest = new JoinRoomRequest(roomId, password);
+```
+
+If the room has a password, it must be provided. Invalid passwords throw an exception.
+</Card>
+
+### Leaving a Room
+
+```csharp
+var partRequest = new PartRoomRequest(roomId);
+```
+
+## Room Status
+
+Rooms have different statuses throughout their lifecycle:
+
+<Steps>
+  <Step title="Open">
+    Room is active and accepting players.
+  </Step>
+  
+  <Step title="Playing">
+    A match is currently in progress.
+  </Step>
+  
+  <Step title="Ended">
+    Room has closed or expired.
+  </Step>
+</Steps>
+
+### Room Availability
+
+Controls who can see and join the room:
+
+```csharp
+public RoomAvailability Availability { get; set; }
+```
+
+<Note>
+Availability options include public, friends-only, and invite-only modes.
+</Note>
+
+## Scoring and Leaderboards
+
+Rooms maintain leaderboards for competitive play:
+
+### Room Leaderboard
+
+<Card title="Leaderboard Request">
+```csharp
+var leaderboardRequest = new GetRoomLeaderboardRequest(roomId);
+```
+
+Returns all scores for the room, sorted by performance.
+</Card>
+
+### Playlist Item Scores
+
+Each playlist item has its own leaderboard:
+
+```csharp
+// Get scores for a specific playlist item
+var scoresRequest = new IndexPlaylistScoresRequest(
+    roomId,
+    playlistItemId,
+    cursor,
+    sort
+);
+```
+
+### Score Retrieval
+
+<Accordion title="Score Query Methods">
+  <AccordionItem title="Show Playlist Score">
+    Retrieve a specific score by ID:
+    
+    ```csharp
+    var scoreRequest = new ShowPlaylistScoreRequest(roomId, playlistId, scoreId);
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Show User Score">
+    Get the current user's score on a playlist item:
+    
+    ```csharp
+    var userScoreRequest = new ShowPlaylistUserScoreRequest(
+        roomId,
+        playlistId,
+        userId
+    );
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Scores Around User">
+    Retrieve scores near the user's ranking:
+    
+    ```csharp
+    public class MultiplayerScoresAround
+    {
+        public MultiplayerScores Higher { get; set; }
+        public MultiplayerScores Lower { get; set; }
+    }
+    ```
+  </AccordionItem>
+</Accordion>
+
+## User Score Tracking
+
+The room tracks aggregate scoring for each user:
+
+```csharp
+public PlaylistAggregateScore? UserScore { get; set; }
+```
+
+<Card title="Aggregate Score">
+Combines performance across all playlist items to show overall user performance in the room.
+</Card>
+
+## Score Submission
+
+When playing in a room, scores are submitted to the server:
+
+<Steps>
+  <Step title="Request Score Token">
+    Before playing, request a token:
+    
+    ```csharp
+    var tokenRequest = new CreateRoomScoreRequest(
+        roomId,
+        playlistItemId,
+        versionHash
+    );
+    ```
+    
+    Returns an `APIScoreToken` for submission.
+  </Step>
+  
+  <Step title="Play Beatmap">
+    Complete the beatmap with the token active.
+  </Step>
+  
+  <Step title="Submit Score">
+    Submit the final score using the token.
+  </Step>
+</Steps>
+
+## Room Listing
+
+Retrieve available rooms from the server:
+
+```csharp
+var roomsRequest = new GetRoomsRequest(category);
+```
+
+<Card title="Filtering Rooms">
+Rooms can be filtered by:
+- Category (Normal, Spotlight, etc.)
+- Game mode
+- Status (Open, Playing)
+- Search terms
+</Card>
+
+## Room Updates
+
+Room properties update in real-time:
+
+```csharp
+public void CopyFrom(Room other)
+{
+    // Updates all properties from another room instance
+    RoomID = other.RoomID;
+    Name = other.Name;
+    Playlist = other.Playlist;
+    // ... etc
+}
+```
+
+<Warning>
+The `Room` class implements `INotifyPropertyChanged`. Subscribe to property changes to keep UI synchronized:
+
+```csharp
+room.PropertyChanged += (sender, args) =>
+{
+    // Handle property change
+};
+```
+</Warning>
+
+## Current Playlist Item
+
+For room listings, a current item is tracked:
+
+```csharp
+public PlaylistItem? CurrentPlaylistItem { get; set; }
+```
+
+<Note>
+This property is primarily used in the lounge screen and may not be accurate inside the room.
+</Note>
+
+## Attempt Tracking
+
+The system tracks how many times each user has attempted each playlist item:
+
+```csharp
+public class ItemAttemptsCount
+{
+    public long PlaylistItemID { get; set; }
+    public int Attempts { get; set; }
+}
+```
+
+This is used to enforce `MaxAttempts` limits in playlist rooms.
+
+## Room Expiration
+
+Rooms automatically close after their end date:
+
+```csharp
+public bool HasEnded => DateTimeOffset.Now >= EndDate;
+```
+
+<Warning>
+This property doesn't update in real-time. Subscribe to `EndDate` changes for immediate notifications.
+</Warning>

@@ -1,0 +1,602 @@
+---
+title: "Difficulty Calculation"
+description: "Implement star rating and performance point calculation for custom rulesets"
+---
+
+## Overview
+
+Difficulty calculation is the system that determines how hard a beatmap is to play. It produces:
+- **Star Rating** - The overall difficulty displayed to players
+- **Difficulty Attributes** - Detailed breakdown of specific difficulty aspects
+- **Performance Points** - Player skill rating based on score performance
+
+The calculation processes hit objects through various "skills" that measure different aspects of difficulty (aim, speed, reading, etc.).
+
+## DifficultyCalculator
+
+The base class for all difficulty calculation:
+
+```csharp
+public abstract class DifficultyCalculator
+{
+    protected IBeatmap Beatmap { get; }
+    protected readonly IWorkingBeatmap WorkingBeatmap;
+    
+    public virtual int Version => 0;
+    
+    protected DifficultyCalculator(IRulesetInfo ruleset, IWorkingBeatmap beatmap);
+    
+    // Main calculation methods
+    public DifficultyAttributes Calculate(CancellationToken cancellationToken = default);
+    public DifficultyAttributes Calculate(IEnumerable<Mod> mods, CancellationToken cancellationToken = default);
+    
+    public List<TimedDifficultyAttributes> CalculateTimed(CancellationToken cancellationToken = default);
+    public List<TimedDifficultyAttributes> CalculateTimed(IEnumerable<Mod> mods, CancellationToken cancellationToken = default);
+    
+    // Abstract methods to implement
+    protected abstract DifficultyAttributes CreateDifficultyAttributes(
+        IBeatmap beatmap, 
+        Mod[] mods, 
+        Skill[] skills, 
+        double clockRate);
+    
+    protected abstract IEnumerable<DifficultyHitObject> CreateDifficultyHitObjects(
+        IBeatmap beatmap, 
+        double clockRate);
+    
+    protected abstract Skill[] CreateSkills(
+        IBeatmap beatmap, 
+        Mod[] mods, 
+        double clockRate);
+    
+    // Optional overrides
+    protected virtual Mod[] DifficultyAdjustmentMods => Array.Empty<Mod>();
+    protected virtual IEnumerable<DifficultyHitObject> SortObjects(IEnumerable<DifficultyHitObject> input);
+}
+```
+
+<ParamField path="Version" type="int">
+  A yymmdd version number used to track when reprocessing is required. Increment when changing calculation logic.
+</ParamField>
+
+<ParamField path="CreateDifficultyAttributes" type="method" required>
+  Combines skill values into final difficulty attributes. Called after all objects are processed.
+</ParamField>
+
+<ParamField path="CreateDifficultyHitObjects" type="method" required>
+  Converts `HitObject`s into `DifficultyHitObject`s that contain analysis data (delta times, distances, etc.).
+</ParamField>
+
+<ParamField path="CreateSkills" type="method" required>
+  Creates the skills used to analyze difficulty. Each skill measures a different aspect.
+</ParamField>
+
+## Basic Implementation
+
+Here's a minimal difficulty calculator:
+
+```csharp osu.Game.Rulesets.MyRuleset/MyRulesetDifficultyCalculator.cs
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using osu.Game.Beatmaps;
+using osu.Game.Rulesets.Difficulty;
+using osu.Game.Rulesets.Difficulty.Preprocessing;
+using osu.Game.Rulesets.Difficulty.Skills;
+using osu.Game.Rulesets.Mods;
+
+namespace osu.Game.Rulesets.MyRuleset
+{
+    public class MyRulesetDifficultyCalculator : DifficultyCalculator
+    {
+        // Update this when calculation logic changes
+        public override int Version => 20260304;
+        
+        public MyRulesetDifficultyCalculator(IRulesetInfo ruleset, IWorkingBeatmap beatmap)
+            : base(ruleset, beatmap)
+        {
+        }
+
+        protected override DifficultyAttributes CreateDifficultyAttributes(
+            IBeatmap beatmap,
+            Mod[] mods,
+            Skill[] skills,
+            double clockRate)
+        {
+            // For now, return minimal attributes
+            return new DifficultyAttributes(mods, 0)
+            {
+                MaxCombo = beatmap.HitObjects.Count
+            };
+        }
+
+        protected override IEnumerable<DifficultyHitObject> CreateDifficultyHitObjects(
+            IBeatmap beatmap,
+            double clockRate)
+        {
+            // Empty implementation - no difficulty objects yet
+            return Enumerable.Empty<DifficultyHitObject>();
+        }
+
+        protected override Skill[] CreateSkills(
+            IBeatmap beatmap,
+            Mod[] mods,
+            double clockRate)
+        {
+            // No skills yet - will add later
+            return Array.Empty<Skill>();
+        }
+    }
+}
+```
+
+<Warning>
+This minimal implementation won't calculate meaningful difficulty. It's just a starting point that allows your ruleset to compile.
+</Warning>
+
+## DifficultyHitObject
+
+Difficulty hit objects contain analysis data:
+
+```csharp
+public class DifficultyHitObject
+{
+    public readonly HitObject BaseObject;
+    public readonly HitObject LastObject;
+    public readonly double DeltaTime;
+    public readonly double StartTime;
+    public readonly double EndTime;
+    public readonly int Index;
+}
+```
+
+Create custom difficulty objects for your ruleset:
+
+```csharp osu.Game.Rulesets.MyRuleset/Difficulty/Preprocessing/MyRulesetDifficultyHitObject.cs
+using osu.Game.Rulesets.Difficulty.Preprocessing;
+using osu.Game.Rulesets.Objects;
+using osu.Game.Rulesets.MyRuleset.Objects;
+using osuTK;
+
+public class MyRulesetDifficultyHitObject : DifficultyHitObject
+{
+    // Additional analysis data
+    public readonly double Distance;
+    public readonly double Angle;
+    public readonly Vector2 Position;
+    
+    public MyRulesetDifficultyHitObject(
+        HitObject hitObject,
+        HitObject lastObject,
+        double clockRate,
+        List<DifficultyHitObject> objects,
+        int index)
+        : base(hitObject, lastObject, clockRate, objects, index)
+    {
+        var currentObject = (MyRulesetHitObject)hitObject;
+        var lastObjectPositioned = (MyRulesetHitObject)lastObject;
+        
+        Position = currentObject.Position;
+        
+        // Calculate distance from last object
+        Distance = Vector2.Distance(Position, lastObjectPositioned.Position);
+        
+        // Calculate angle between movements
+        if (Index >= 2)
+        {
+            var prevPrevObject = (MyRulesetHitObject)objects[Index - 2].BaseObject;
+            Vector2 lastMovement = lastObjectPositioned.Position - prevPrevObject.Position;
+            Vector2 currentMovement = Position - lastObjectPositioned.Position;
+            
+            double dot = Vector2.Dot(lastMovement, currentMovement);
+            double det = lastMovement.X * currentMovement.Y - lastMovement.Y * currentMovement.X;
+            Angle = Math.Abs(Math.Atan2(det, dot));
+        }
+    }
+}
+```
+
+Implement in your calculator:
+
+```csharp
+protected override IEnumerable<DifficultyHitObject> CreateDifficultyHitObjects(
+    IBeatmap beatmap,
+    double clockRate)
+{
+    var hitObjects = beatmap.HitObjects.Cast<MyRulesetHitObject>().ToList();
+    
+    for (int i = 1; i < hitObjects.Count; i++)
+    {
+        yield return new MyRulesetDifficultyHitObject(
+            hitObjects[i],
+            hitObjects[i - 1],
+            clockRate,
+            new List<DifficultyHitObject>(),
+            i
+        );
+    }
+}
+```
+
+## Skills
+
+Skills process difficulty objects and produce difficulty values:
+
+```csharp
+public abstract class Skill
+{
+    protected IReadOnlyList<Mod> Mods { get; }
+    
+    protected Skill(Mod[] mods);
+    
+    public abstract void Process(DifficultyHitObject current);
+    public abstract double DifficultyValue();
+}
+```
+
+Two common base classes extend this:
+
+### StrainSkill
+
+For difficulty that accumulates over time (aim, speed):
+
+```csharp osu.Game.Rulesets.MyRuleset/Difficulty/Skills/Aim.cs
+using osu.Game.Rulesets.Difficulty.Preprocessing;
+using osu.Game.Rulesets.Difficulty.Skills;
+using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.MyRuleset.Difficulty.Preprocessing;
+
+public class Aim : StrainSkill
+{
+    private const double skill_multiplier = 26.25;
+    private const double strain_decay_base = 0.15;
+    
+    public Aim(Mod[] mods)
+        : base(mods)
+    {
+    }
+
+    protected override double SkillMultiplier => skill_multiplier;
+    protected override double StrainDecayBase => strain_decay_base;
+
+    protected override double StrainValueOf(DifficultyHitObject current)
+    {
+        var myObject = (MyRulesetDifficultyHitObject)current;
+        
+        // Calculate strain based on distance and angle
+        double distanceStrain = Math.Pow(myObject.Distance, 1.3);
+        double angleStrain = Math.Sin(myObject.Angle) * 1.5;
+        
+        return (distanceStrain + angleStrain) / myObject.DeltaTime;
+    }
+}
+```
+
+<ParamField path="SkillMultiplier" type="double">
+  Global multiplier applied to final difficulty value. Tune this to scale your star rating appropriately.
+</ParamField>
+
+<ParamField path="StrainDecayBase" type="double">
+  How quickly strain decays over time. Higher = strain persists longer. Typically 0.1-0.3.
+</ParamField>
+
+<ParamField path="StrainValueOf" type="method" required>
+  Calculates the strain (difficulty) for a single hit object.
+</ParamField>
+
+### StrainDecaySkill
+
+For continuous difficulty that decays between objects:
+
+```csharp osu.Game.Rulesets.MyRuleset/Difficulty/Skills/Speed.cs
+public class Speed : StrainDecaySkill
+{
+    private const double skill_multiplier = 1.43;
+    private const double strain_decay_base = 0.3;
+    
+    public Speed(Mod[] mods)
+        : base(mods)
+    {
+    }
+
+    protected override double SkillMultiplier => skill_multiplier;
+    protected override double StrainDecayBase => strain_decay_base;
+
+    protected override double StrainValueAt(DifficultyHitObject current)
+    {
+        var myObject = (MyRulesetDifficultyHitObject)current;
+        
+        // Faster = more difficulty
+        return 1000.0 / myObject.DeltaTime;
+    }
+}
+```
+
+Register skills in your calculator:
+
+```csharp
+protected override Skill[] CreateSkills(IBeatmap beatmap, Mod[] mods, double clockRate)
+{
+    return new Skill[]
+    {
+        new Aim(mods),
+        new Speed(mods),
+    };
+}
+```
+
+## DifficultyAttributes
+
+Combine skill values into final attributes:
+
+```csharp osu.Game.Rulesets.MyRuleset/Difficulty/MyRulesetDifficultyAttributes.cs
+using System.Collections.Generic;
+using Newtonsoft.Json;
+using osu.Game.Beatmaps;
+using osu.Game.Rulesets.Difficulty;
+using osu.Game.Rulesets.Mods;
+
+public class MyRulesetDifficultyAttributes : DifficultyAttributes
+{
+    [JsonProperty("aim_difficulty")]
+    public double AimDifficulty { get; set; }
+    
+    [JsonProperty("speed_difficulty")]
+    public double SpeedDifficulty { get; set; }
+    
+    [JsonProperty("approach_rate")]
+    public double ApproachRate { get; set; }
+    
+    [JsonProperty("overall_difficulty")]
+    public double OverallDifficulty { get; set; }
+    
+    public MyRulesetDifficultyAttributes()
+    {
+    }
+    
+    public MyRulesetDifficultyAttributes(Mod[] mods, double starRating)
+        : base(mods, starRating)
+    {
+    }
+    
+    public override IEnumerable<(int attributeId, object value)> ToDatabaseAttributes()
+    {
+        foreach (var v in base.ToDatabaseAttributes())
+            yield return v;
+            
+        yield return (ATTRIB_ID_AIM, AimDifficulty);
+        yield return (ATTRIB_ID_SPEED, SpeedDifficulty);
+    }
+}
+```
+
+Create attributes in your calculator:
+
+```csharp
+protected override DifficultyAttributes CreateDifficultyAttributes(
+    IBeatmap beatmap,
+    Mod[] mods,
+    Skill[] skills,
+    double clockRate)
+{
+    if (beatmap.HitObjects.Count == 0)
+        return new MyRulesetDifficultyAttributes { Mods = mods };
+    
+    var aimSkill = (Aim)skills[0];
+    var speedSkill = (Speed)skills[1];
+    
+    double aimRating = Math.Sqrt(aimSkill.DifficultyValue()) * 0.0675;
+    double speedRating = Math.Sqrt(speedSkill.DifficultyValue()) * 0.0675;
+    
+    // Combine aim and speed into total star rating
+    double starRating = Math.Sqrt(
+        Math.Pow(aimRating, 2) + 
+        Math.Pow(speedRating, 2)
+    );
+    
+    return new MyRulesetDifficultyAttributes(mods, starRating)
+    {
+        AimDifficulty = aimRating,
+        SpeedDifficulty = speedRating,
+        MaxCombo = beatmap.HitObjects.Count,
+        ApproachRate = beatmap.Difficulty.ApproachRate,
+        OverallDifficulty = beatmap.Difficulty.OverallDifficulty,
+    };
+}
+```
+
+<Tip>
+Star rating typically ranges from 0-10+. Scale your skill values appropriately. Most rulesets multiply by ~0.06-0.07 and take the square root.
+</Tip>
+
+## PerformanceCalculator
+
+Convert score performance into performance points (pp):
+
+```csharp
+public abstract class PerformanceCalculator
+{
+    protected readonly Ruleset Ruleset;
+    
+    protected PerformanceCalculator(Ruleset ruleset);
+    
+    public PerformanceAttributes Calculate(ScoreInfo score, DifficultyAttributes attributes);
+    public PerformanceAttributes Calculate(ScoreInfo score, IWorkingBeatmap beatmap);
+    
+    protected abstract PerformanceAttributes CreatePerformanceAttributes(
+        ScoreInfo score,
+        DifficultyAttributes attributes);
+}
+```
+
+Implement performance calculation:
+
+```csharp osu.Game.Rulesets.MyRuleset/Difficulty/MyRulesetPerformanceCalculator.cs
+using System;
+using System.Linq;
+using osu.Game.Rulesets.Difficulty;
+using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.Scoring;
+using osu.Game.Scoring;
+
+public class MyRulesetPerformanceCalculator : PerformanceCalculator
+{
+    public MyRulesetPerformanceCalculator(Ruleset ruleset)
+        : base(ruleset)
+    {
+    }
+
+    protected override PerformanceAttributes CreatePerformanceAttributes(
+        ScoreInfo score,
+        DifficultyAttributes attributes)
+    {
+        var myAttributes = (MyRulesetDifficultyAttributes)attributes;
+        
+        double multiplier = 1.12; // Base multiplier
+        
+        // Apply mod multipliers
+        if (score.Mods.Any(m => m is ModNoFail))
+            multiplier *= 0.90;
+        if (score.Mods.Any(m => m is ModHidden))
+            multiplier *= 1.06;
+        
+        // Calculate aim pp
+        double aimValue = ComputeAimValue(score, myAttributes);
+        
+        // Calculate speed pp
+        double speedValue = ComputeSpeedValue(score, myAttributes);
+        
+        // Calculate accuracy pp
+        double accuracyValue = ComputeAccuracyValue(score, myAttributes);
+        
+        // Combine all pp values
+        double totalValue = Math.Pow(
+            Math.Pow(aimValue, 1.1) +
+            Math.Pow(speedValue, 1.1) +
+            Math.Pow(accuracyValue, 1.1),
+            1.0 / 1.1
+        ) * multiplier;
+        
+        return new MyRulesetPerformanceAttributes
+        {
+            Total = totalValue,
+            Aim = aimValue,
+            Speed = speedValue,
+            Accuracy = accuracyValue,
+        };
+    }
+    
+    private double ComputeAimValue(ScoreInfo score, MyRulesetDifficultyAttributes attributes)
+    {
+        double aimValue = Math.Pow(5.0 * Math.Max(1.0, attributes.AimDifficulty / 0.0675) - 4.0, 3.0) / 100000.0;
+        
+        // Penalize misses
+        double missPenalty = Math.Pow(0.97, score.Statistics.GetValueOrDefault(HitResult.Miss));
+        aimValue *= missPenalty;
+        
+        // Reward accuracy
+        aimValue *= Math.Max(score.Accuracy, 0.5);
+        
+        return aimValue;
+    }
+    
+    private double ComputeSpeedValue(ScoreInfo score, MyRulesetDifficultyAttributes attributes)
+    {
+        double speedValue = Math.Pow(5.0 * Math.Max(1.0, attributes.SpeedDifficulty / 0.0675) - 4.0, 3.0) / 100000.0;
+        
+        // Penalize misses more heavily for speed
+        double missPenalty = Math.Pow(0.95, score.Statistics.GetValueOrDefault(HitResult.Miss));
+        speedValue *= missPenalty;
+        
+        return speedValue;
+    }
+    
+    private double ComputeAccuracyValue(ScoreInfo score, MyRulesetDifficultyAttributes attributes)
+    {
+        double accuracyValue = Math.Pow(1.52163, attributes.OverallDifficulty) * 
+                               Math.Pow(score.Accuracy, 24.0) * 2.83;
+        
+        return accuracyValue;
+    }
+}
+```
+
+Register in your ruleset:
+
+```csharp osu.Game.Rulesets.MyRuleset/MyRulesetRuleset.cs
+public override PerformanceCalculator? CreatePerformanceCalculator()
+{
+    return new MyRulesetPerformanceCalculator(this);
+}
+```
+
+<Warning>
+Performance calculation formulas require extensive playtesting and tuning. Start with simplified calculations and refine based on community feedback.
+</Warning>
+
+## Testing Difficulty Calculation
+
+Test your calculator with known beatmaps:
+
+```csharp
+public partial class TestSceneDifficultyCalculation : OsuTestScene
+{
+    [Test]
+    public void TestDifficultyCalculation()
+    {
+        var beatmap = CreateBeatmap(new MyRulesetRuleset().RulesetInfo);
+        var calculator = new MyRulesetDifficultyCalculator(beatmap.BeatmapInfo.Ruleset, beatmap);
+        
+        var attributes = calculator.Calculate();
+        
+        Assert.Greater(attributes.StarRating, 0);
+        Assert.Greater(attributes.MaxCombo, 0);
+    }
+    
+    [Test]
+    public void TestDoubleTimeMultiplier()
+    {
+        var beatmap = CreateBeatmap(new MyRulesetRuleset().RulesetInfo);
+        var calculator = new MyRulesetDifficultyCalculator(beatmap.BeatmapInfo.Ruleset, beatmap);
+        
+        var noMod = calculator.Calculate();
+        var withDT = calculator.Calculate(new[] { new MyRulesetModDoubleTime() });
+        
+        Assert.Greater(withDT.StarRating, noMod.StarRating);
+    }
+}
+```
+
+## Best Practices
+
+<Tip>
+**Start Simple**: Begin with basic calculations and add complexity gradually. Test frequently with real beatmaps.
+</Tip>
+
+<Tip>
+**Version Tracking**: Increment `Version` whenever you change calculation logic. This helps track when scores need recalculation.
+</Tip>
+
+<Tip>
+**Balance Star Ratings**: Aim for 0-10+ stars to match osu! conventions. Most popular beatmaps fall in the 3-7 star range.
+</Tip>
+
+<Tip>
+**Test with Mods**: Ensure difficulty scales appropriately with Double Time, Hard Rock, and other mods.
+</Tip>
+
+<Warning>
+Performance calculation affects player rankings. Test thoroughly and consider community feedback before finalizing formulas.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Mods System" icon="sliders" href="/development/rulesets/mods">
+    Learn how mods affect difficulty calculation
+  </Card>
+  
+  <Card title="Community Rulesets" icon="users" href="https://github.com/ppy/osu/discussions/13096">
+    See real difficulty calculations from other rulesets
+  </Card>
+</CardGroup>

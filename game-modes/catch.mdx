@@ -1,0 +1,406 @@
+---
+title: osu!catch
+description: A fruit-catching game mode with horizontal movement and falling objects
+---
+
+osu!catch (formerly osu!ctb) is a game mode where players control a catcher at the bottom of the screen to catch falling fruits. The catcher moves horizontally to catch fruits that fall in time with the music.
+
+## Hit Objects
+
+osu!catch has four types of hit objects, all defined in `osu.Game.Rulesets.Catch/Objects/`:
+
+<CardGroup cols={2}>
+  <Card title="Fruits" icon="apple-whole">
+    Main catchable objects worth full points
+  </Card>
+  <Card title="Juice Streams" icon="droplet">
+    Streams of fruits and droplets following a path
+  </Card>
+  <Card title="Droplets" icon="circle">
+    Small objects within juice streams
+  </Card>
+  <Card title="Banana Showers" icon="cloud-rain">
+    Bonus objects that rain down randomly
+  </Card>
+</CardGroup>
+
+### Fruits
+
+The primary hit object - catch these for full points.
+
+**Source:** `osu.Game.Rulesets.Catch/Objects/Fruit.cs:9`
+
+```csharp
+public class Fruit : PalpableCatchHitObject
+{
+    public override Judgement CreateJudgement() => new CatchJudgement();
+    
+    public static FruitVisualRepresentation GetVisualRepresentation(int indexInBeatmap) 
+        => (FruitVisualRepresentation)(indexInBeatmap % 4);
+}
+```
+
+Fruits cycle through 4 visual representations (apple, orange, grape, pear) based on their sequence position.
+
+<Info>
+Fruits inherit from `PalpableCatchHitObject`, which includes properties for horizontal position and hyperdash mechanics.
+</Info>
+
+### Juice Streams
+
+Continuous paths of fruits and droplets.
+
+**Source:** `osu.Game.Rulesets.Catch/Objects/JuiceStream.cs:20`
+
+```csharp
+public class JuiceStream : CatchHitObject, IHasPathWithRepeats, IHasSliderVelocity
+{
+    private const float base_scoring_distance = 100;
+    
+    public int RepeatCount { get; set; }
+    public double SliderVelocityMultiplier { get; set; }
+    public double TickDistanceMultiplier = 1;
+    public double Velocity { get; private set; }
+    public double TickDistance { get; private set; }
+    public SliderPath Path { get; set; }
+}
+```
+
+**Velocity Calculation** (`JuiceStream.cs:60-73`):
+
+```csharp
+protected override void ApplyDefaultsToSelf(ControlPointInfo controlPointInfo, 
+                                           IBeatmapDifficultyInfo difficulty)
+{
+    base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+    
+    TimingControlPoint timingPoint = controlPointInfo.TimingPointAt(StartTime);
+    
+    Velocity = base_scoring_distance * difficulty.SliderMultiplier 
+        / LegacyRulesetExtensions.GetPrecisionAdjustedBeatLength(
+            this, timingPoint, CatchRuleset.SHORT_NAME);
+    
+    double scoringDistance = Velocity * timingPoint.BeatLength;
+    TickDistance = scoringDistance / difficulty.SliderTickRate * TickDistanceMultiplier;
+}
+```
+
+**Nested Object Generation** (`JuiceStream.cs:75-139`):
+
+Juice streams generate multiple nested objects:
+
+```csharp
+protected override void CreateNestedHitObjects(CancellationToken cancellationToken)
+{
+    base.CreateNestedHitObjects(cancellationToken);
+    
+    this.PopulateNodeSamples();
+    
+    var dropletSamples = Samples.Select(s => s.With(@"slidertick")).ToList();
+    
+    int nodeIndex = 0;
+    SliderEventDescriptor? lastEvent = null;
+    
+    foreach (var e in SliderEventGenerator.Generate(StartTime, SpanDuration, 
+        Velocity, TickDistance, Path.Distance, this.SpanCount(), cancellationToken))
+    {
+        // Generate tiny droplets between ticks
+        if (lastEvent != null)
+        {
+            double sinceLastTick = (int)e.Time - (int)lastEvent.Value.Time;
+            
+            if (sinceLastTick > 80)
+            {
+                double timeBetweenTiny = sinceLastTick;
+                while (timeBetweenTiny > 100)
+                    timeBetweenTiny /= 2;
+                
+                for (double t = timeBetweenTiny; t < sinceLastTick; t += timeBetweenTiny)
+                {
+                    AddNested(new TinyDroplet
+                    {
+                        StartTime = t + lastEvent.Value.Time,
+                        X = EffectiveX + Path.PositionAt(...).X,
+                    });
+                }
+            }
+        }
+        
+        lastEvent = e;
+        
+        switch (e.Type)
+        {
+            case SliderEventType.Tick:
+                AddNested(new Droplet { ... });
+                break;
+            
+            case SliderEventType.Head:
+            case SliderEventType.Tail:
+            case SliderEventType.Repeat:
+                AddNested(new Fruit { ... });
+                break;
+        }
+    }
+}
+```
+
+<Tip>
+Juice streams automatically generate tiny droplets between regular droplets when gaps exceed 80ms, preventing uncatchable sections.
+</Tip>
+
+### Droplets and Tiny Droplets
+
+Smaller objects within juice streams:
+
+- **Droplets**: Regular ticks along the path (LargeTickHit/Miss)
+- **Tiny Droplets**: Small filler objects (SmallTickHit/Miss)
+
+```csharp
+public class Droplet : PalpableCatchHitObject
+{
+    public override Judgement CreateJudgement() => new CatchDropletJudgement();
+}
+
+public class TinyDroplet : Droplet
+{
+    public override Judgement CreateJudgement() => new CatchTinyDropletJudgement();
+}
+```
+
+### Banana Showers
+
+Bonus objects that spawn randomly across the screen.
+
+**Source:** `osu.Game.Rulesets.Catch/Objects/BananaShower.cs:12`
+
+```csharp
+public class BananaShower : CatchHitObject, IHasDuration
+{
+    public override bool LastInCombo => true;
+    public double Duration { get; set; }
+    
+    public override Judgement CreateJudgement() => new IgnoreJudgement();
+}
+```
+
+**Banana Generation** (`BananaShower.cs:24-51`):
+
+```csharp
+private void createBananas(CancellationToken cancellationToken)
+{
+    int startTime = (int)StartTime;
+    int endTime = (int)EndTime;
+    float spacing = (float)(EndTime - StartTime);
+    
+    while (spacing > 100)
+        spacing /= 2;
+    
+    if (spacing <= 0)
+        return;
+    
+    int count = 0;
+    
+    for (float time = startTime; time <= endTime; time += spacing)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        AddNested(new Banana
+        {
+            StartTime = time,
+            BananaIndex = count,
+            Samples = new List<HitSampleInfo> { 
+                new Banana.BananaHitSampleInfo(CreateHitSampleInfo()) 
+            }
+        });
+        
+        count++;
+    }
+}
+```
+
+## Scoring System
+
+Catch uses a catch/miss binary system with combo multipliers.
+
+### Hit Results
+
+**Source:** `CatchRuleset.cs:179-194`
+
+```csharp
+public override IEnumerable<HitResult> GetValidHitResults()
+{
+    return new[]
+    {
+        HitResult.Great,         // Caught fruit
+        HitResult.Miss,          // Missed fruit
+        
+        HitResult.LargeTickHit,  // Caught droplet
+        HitResult.LargeTickMiss, // Missed droplet
+        HitResult.SmallTickHit,  // Caught tiny droplet
+        HitResult.SmallTickMiss, // Missed tiny droplet
+        HitResult.LargeBonus,    // Caught banana
+        HitResult.IgnoreHit,
+        HitResult.IgnoreMiss,
+    };
+}
+```
+
+### Accuracy Calculation
+
+```
+Accuracy = (Caught Fruits + Caught Droplets + Caught Tiny Droplets) 
+         / (Total Fruits + Total Droplets + Total Tiny Droplets)
+```
+
+Bananas are bonus and don't affect accuracy.
+
+### Combo System
+
+- Fruits: +1 combo
+- Droplets: +1 combo
+- Tiny Droplets: +1 combo
+- Bananas: Bonus score, no combo
+
+Missing any catchable object breaks combo.
+
+## Difficulty Attributes
+
+**Source:** `CatchRuleset.cs:290-315`
+
+### Circle Size (CS)
+
+Affects the size of fruits and the catcher:
+
+```csharp
+yield return new RulesetBeatmapAttribute("Circle Size", @"CS", 
+    originalDifficulty.CircleSize, effectiveDifficulty.CircleSize, 10)
+{
+    Description = "Affects the size of fruits.",
+    AdditionalMetrics = [
+        new RulesetBeatmapAttribute.AdditionalMetric(
+            "Hit circle radius", 
+            (CatchHitObject.OBJECT_RADIUS 
+                * LegacyRulesetExtensions.CalculateScaleFromCircleSize(
+                    effectiveDifficulty.CircleSize)
+            ).ToLocalisableString("0.#")
+        )
+    ]
+};
+```
+
+### Approach Rate (AR)
+
+Controls how early fruits appear:
+
+```csharp
+yield return new RulesetBeatmapAttribute("Approach Rate", @"AR", 
+    originalDifficulty.ApproachRate, effectiveDifficulty.ApproachRate, 10)
+{
+    Description = "Affects how early fruits fade in on the screen.",
+    AdditionalMetrics = [
+        new RulesetBeatmapAttribute.AdditionalMetric(
+            "Fade-in time", 
+            LocalisableString.Interpolate(
+                $@"{IBeatmapDifficultyInfo.DifficultyRangeInt(
+                    effectiveDifficulty.ApproachRate, 
+                    CatchHitObject.PREEMPT_RANGE):#,0.##} ms"
+            )
+        )
+    ]
+};
+```
+
+### HP Drain
+
+Controls health drain and miss penalties.
+
+## Input Handling
+
+**Source:** `CatchRuleset.cs:60-68`
+
+```csharp
+public override IEnumerable<KeyBinding> GetDefaultKeyBindings(int variant = 0) => new[]
+{
+    new KeyBinding(InputKey.Z, CatchAction.MoveLeft),
+    new KeyBinding(InputKey.Left, CatchAction.MoveLeft),
+    new KeyBinding(InputKey.X, CatchAction.MoveRight),
+    new KeyBinding(InputKey.Right, CatchAction.MoveRight),
+    new KeyBinding(InputKey.Shift, CatchAction.Dash),
+    new KeyBinding(InputKey.MouseLeft, CatchAction.Dash),
+};
+```
+
+### Control Methods
+
+- **Keyboard**: Arrow keys or Z/X for movement + Shift for dash
+- **Mouse**: Catcher follows cursor position, click for dash
+- **Hybrid**: Move with keyboard, dash with mouse
+
+<Info>
+The catcher has momentum and acceleration - movement is not instant, requiring prediction and timing.
+</Info>
+
+## Unique Features
+
+### Hyperdash Mechanic
+
+When fruits are too far apart to catch normally, hyperdash is triggered:
+
+- Catcher automatically dashes at increased speed
+- Indicated by red color on the triggering fruit
+- Must be held until reaching the next fruit
+
+### Juice Trails
+
+Juice streams create visual trails showing the path fruits will follow.
+
+### Catcher States
+
+The catcher has three states:
+- **Normal**: Standard movement
+- **Dashing**: Manual dash activation (Shift/Click)
+- **Hyperdashing**: Automatic high-speed movement
+
+### No Timing Windows
+
+Unlike other modes, catch has no timing windows - fruits are either caught or missed based purely on position:
+
+```csharp
+protected override HitWindows CreateHitWindows() => HitWindows.Empty;
+```
+
+## Performance Calculation
+
+Catch difficulty calculation evaluates:
+
+1. **Movement**: Horizontal distance and speed requirements
+2. **Approach Rate**: Reading and reaction requirements
+3. **Accuracy**: Catch rate (doesn't use timing)
+
+<Tip>
+Catch difficulty heavily weights movement patterns that require precise dash timing and edge-of-catcher catches.
+</Tip>
+
+## Beatmap Conversion
+
+When converting from osu!standard to catch:
+
+- **Hit Circles** → Fruits at the horizontal position
+- **Sliders** → Juice streams following the slider path
+- **Spinners** → Banana showers with duration equal to spinner length
+
+Conversion preserves horizontal positioning:
+
+```csharp
+public float EndX => EffectiveX + this.CurvePositionAt(1).X;
+```
+
+## Related Files
+
+- Main Ruleset: `osu.Game.Rulesets.Catch/CatchRuleset.cs`
+- Hit Objects: `osu.Game.Rulesets.Catch/Objects/`
+- Beatmap Conversion: `osu.Game.Rulesets.Catch/Beatmaps/CatchBeatmapConverter.cs`
+- Scoring: `osu.Game.Rulesets.Catch/Scoring/CatchScoreProcessor.cs`
+- Difficulty: `osu.Game.Rulesets.Catch/Difficulty/`
+- UI: `osu.Game.Rulesets.Catch/UI/`
+- Catcher: `osu.Game.Rulesets.Catch/UI/Catcher.cs`

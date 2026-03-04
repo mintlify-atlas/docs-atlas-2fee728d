@@ -1,0 +1,327 @@
+---
+title: Chat System
+description: Real-time messaging, channels, and community interaction in osu!
+---
+
+The osu! chat system provides real-time communication between players through multiple channel types, private messaging, and integrated command support.
+
+## Overview
+
+The chat system (`osu.Game/Online/Chat/`) manages all player communication, including:
+
+- Public channels (#osu, #lobby, etc.)
+- Private messages (PMs)
+- Multiplayer room chat
+- Spectator chat
+- Team channels
+- Command processing
+- Link formatting and parsing
+
+<Info>
+Chat uses WebSocket-based communication for real-time message delivery with automatic reconnection handling.
+</Info>
+
+## Channel Types
+
+Implemented in `osu.Game/Online/Chat/ChannelType.cs:6`:
+
+### Available Channel Types
+
+<Card title="Channel Categories" icon="comments">
+- **Public** - Open channels anyone can join (#osu, #lobby)
+- **Private** - Invite-only channels
+- **PM** - One-on-one private messaging
+- **Group** - Group private messages
+- **Multiplayer** - Match-specific chat rooms
+- **Spectator** - Chat for spectating sessions
+- **Temporary** - Short-lived event channels
+- **Team** - Team-based communication
+- **System** - System announcements
+- **Announce** - Announcement channels
+</Card>
+
+## Channel Management
+
+The `ChannelManager` handles all channel operations:
+
+### Default Channels
+
+Players automatically join these channels on startup:
+- `#lazer` - osu!lazer discussion
+- `#osu` - General osu! chat
+- `#lobby` - Multiplayer lobby
+
+Implemented in `osu.Game/Online/Chat/ChannelManager.cs:28`
+
+### Channel Operations
+
+<Card title="Channel Actions" icon="folder-open">
+- **OpenChannel(name)** - Open or switch to a channel by name
+- **OpenPrivateChannel(user)** - Start a PM conversation
+- **JoinChannel(channel)** - Join a new channel
+- **LeaveChannel(channel)** - Exit a channel
+- **JoinLastClosedChannel()** - Reopen the most recently closed channel
+- **MarkChannelAsRead(channel)** - Mark all messages as read
+</Card>
+
+### Channel History
+
+The system maintains a history of recently closed channels (up to 50):
+
+```csharp
+private const int closed_channels_max_size = 50;
+```
+
+<Tip>
+Use JoinLastClosedChannel() to reopen tabs, similar to Ctrl+Shift+T in web browsers.
+</Tip>
+
+## Message System
+
+Messages are represented by the `Message` class with support for multiple message types:
+
+### Message Types
+
+- **Message** - Standard chat message
+- **LocalMessage** - Client-side only messages
+- **LocalEchoMessage** - Pending messages awaiting server confirmation
+- **InfoMessage** - System information messages
+- **ErrorMessage** - Error notifications
+
+Implemented in `osu.Game/Online/Chat/Message.cs:14`
+
+### Message Properties
+
+<Card title="Message Data" icon="envelope">
+- **Id** - Unique message identifier (server-assigned)
+- **ChannelId** - Channel the message belongs to
+- **Content** - Raw message text
+- **DisplayContent** - Formatted text for display
+- **Sender** - User who sent the message
+- **SenderId** - Sender's user ID
+- **Timestamp** - When the message was sent
+- **IsAction** - Whether this is an action message (/me)
+- **Uuid** - Client-generated UUID for deduplication
+- **Links** - Parsed links within the message
+</Card>
+
+## Message Formatting
+
+The `MessageFormatter` automatically processes message content to create clickable links:
+
+### Supported Link Formats
+
+Implemented in `osu.Game/Online/Chat/MessageFormatter.cs:14`:
+
+<Card title="Link Types" icon="link">
+- **Beatmap links** - `https://osu.ppy.sh/b/1234` or `osu://b/1234`
+- **Beatmapset links** - `https://osu.ppy.sh/beatmapsets/1234`
+- **User profiles** - `https://osu.ppy.sh/u/username`
+- **Wiki pages** - `[[Article Name]]` → wiki link
+- **Channels** - `#osu` → channel link
+- **Timestamps** - `00:12:345` → editor timestamp
+- **Multiplayer rooms** - `https://osu.ppy.sh/multiplayer/rooms/1234`
+- **Spectate links** - `osu://spectate/username`
+- **Markdown links** - `[text](url)`
+- **Old format** - `(text)[url]` and `[url text]`
+- **External URLs** - Standard HTTP/HTTPS links
+</Card>
+
+### Link Actions
+
+Clicking formatted links triggers specific actions:
+
+```csharp
+public enum LinkAction
+{
+    External,
+    OpenBeatmap,
+    OpenBeatmapSet,
+    OpenChannel,
+    OpenEditorTimestamp,
+    JoinRoom,
+    Spectate,
+    OpenUserProfile,
+    OpenWiki,
+    OpenChangelog,
+    // ... and more
+}
+```
+
+<Info>
+Links are automatically parsed and styled with proper security warnings for external URLs.
+</Info>
+
+## Chat Commands
+
+The system supports several built-in commands:
+
+### Available Commands
+
+<Card title="Command List" icon="terminal">
+- **/help** - Display list of supported commands
+- **/me [action]** - Send an action message
+- **/np** - Share currently playing beatmap
+- **/join [channel]** - Join a public channel
+- **/chat [user]** - Open PM with a user
+- **/msg [user]** - Alias for /chat
+- **/query [user]** - Alias for /chat
+</Card>
+
+Implemented in `ChannelManager.cs:254`
+
+### Command Processing
+
+Commands are processed locally and may trigger:
+- API requests (user lookup, channel joining)
+- State changes (opening new channels)
+- Local messages (help text, errors)
+
+## Message Queue
+
+Messages are sent through a sequential queue system:
+
+```csharp
+private readonly Queue<Action> postQueue = new Queue<Action>();
+```
+
+This ensures:
+- Messages are sent in order
+- No race conditions between multiple messages
+- Proper handling of PM channel creation
+- Error recovery for failed sends
+
+<Tip>
+PM channels are created automatically when sending the first message to a new recipient.
+</Tip>
+
+## Message History
+
+Each channel maintains a message history with automatic pruning:
+
+```csharp
+public const int MAX_HISTORY = 300;
+```
+
+Implemented in `osu.Game/Online/Chat/Channel.cs:21`:
+
+- Messages stored in sorted list
+- Automatic purging when exceeding limit
+- Pending messages never purged
+- Local echo messages tracked separately
+
+## Local Echo System
+
+When sending messages, a local echo appears immediately:
+
+1. Client creates `LocalEchoMessage`
+2. Message added to channel (visible instantly)
+3. Request sent to server
+4. Server response replaces local echo with real message
+5. If failed, local echo is removed
+
+This provides instant feedback while ensuring consistency.
+
+## User Presence
+
+The chat system tracks user online status:
+
+### Acknowledgment System
+
+Every 60 seconds, the client sends an ACK request to:
+- Mark user as online
+- Receive messages from public channels
+- Get silenced user updates
+- Maintain connection state
+
+Implemented in `ChannelManager.cs:405`
+
+<Info>
+Players must send ACK at least once every 10 minutes to remain visibly online in chat.
+</Info>
+
+## Message Filtering
+
+The system automatically filters messages:
+
+### Block List Integration
+
+```csharp
+var blockedUserIds = localUserBlocks.Select(b => b.TargetID).ToList();
+messages.Where(m => !blockedUserIds.Contains(m.SenderId))
+```
+
+- Blocked users' messages hidden automatically
+- Silenced users' messages removed from all channels
+- Real-time updates when block list changes
+
+## Chat Notifications
+
+The `MessageNotifier` component handles:
+
+- New message notifications
+- Mention highlighting
+- Sound alerts
+- Desktop notifications
+- Badge counters for unread messages
+
+## WebSocket Communication
+
+Chat uses `WebSocketChatClient` for real-time messaging:
+
+<Card title="WebSocket Features" icon="bolt">
+- Automatic reconnection on disconnect
+- Message queuing during offline periods
+- Presence updates via WebSocket events
+- Channel join/part notifications
+- Real-time message delivery
+</Card>
+
+Implemented in `osu.Game/Online/Chat/WebSocketChatClient.cs`
+
+## Unread Messages
+
+Each channel tracks unread messages:
+
+```csharp
+public IEnumerable<Message> UnreadMessages => 
+    Messages.Where(m => LastReadId < m.Id);
+```
+
+- `LastReadId` - Last message ID the user has read
+- `LastMessageId` - Most recent message in channel
+- Automatic marking when channel is focused
+- Server synchronization via MarkChannelAsRead API
+
+## Message Limits
+
+Channels have configurable message length limits:
+
+```csharp
+public int? MessageLengthLimit
+```
+
+This enforces character limits based on:
+- Channel type
+- User permissions
+- Server configuration
+
+<Tip>
+Action messages (/me) and commands count toward the message length limit.
+</Tip>
+
+## Message Events
+
+Channels expose events for message updates:
+
+```csharp
+public event Action<IEnumerable<Message>> NewMessagesArrived;
+public event Action<LocalEchoMessage, Message> PendingMessageResolved;
+public event Action<Message> MessageRemoved;
+```
+
+These enable:
+- UI updates when messages arrive
+- Scroll position management
+- Notification triggers
+- Message animation timing

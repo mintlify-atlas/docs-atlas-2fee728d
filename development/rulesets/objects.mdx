@@ -1,0 +1,492 @@
+---
+title: "Hit Objects"
+description: "Define gameplay elements and their visual representation in custom rulesets"
+---
+
+## Overview
+
+Hit objects are the core gameplay elements that players interact with. They represent timing points, positions, and patterns in a beatmap that require player input or attention.
+
+Every hit object consists of two parts:
+1. **Data representation** - The `HitObject` class containing timing and properties
+2. **Visual representation** - The `DrawableHitObject` class for rendering and interaction
+
+## HitObject Base Class
+
+All hit objects inherit from `osu.Game.Rulesets.Objects.HitObject`:
+
+```csharp
+public class HitObject
+{
+    // Timing
+    public virtual double StartTime { get; set; }
+    public readonly Bindable<double> StartTimeBindable;
+    
+    // Audio
+    public IList<HitSampleInfo> Samples { get; set; }
+    public virtual IList<HitSampleInfo> AuxiliarySamples { get; }
+    
+    // Gameplay
+    public HitWindows HitWindows { get; set; }
+    public bool Kiai { get; }
+    
+    // Nested objects
+    public SlimReadOnlyListWrapper<HitObject> NestedHitObjects { get; }
+    
+    // Lifecycle
+    public void ApplyDefaults(ControlPointInfo controlPointInfo, IBeatmapDifficultyInfo difficulty, CancellationToken cancellationToken = default);
+    protected virtual void ApplyDefaultsToSelf(ControlPointInfo controlPointInfo, IBeatmapDifficultyInfo difficulty);
+    protected virtual void CreateNestedHitObjects(CancellationToken cancellationToken);
+    protected void AddNested(HitObject hitObject);
+    
+    // Judgement
+    public virtual Judgement CreateJudgement();
+    protected virtual HitWindows CreateHitWindows();
+    public virtual double MaximumJudgementOffset { get; }
+}
+```
+
+<ParamField path="StartTime" type="double" required>
+  The time in milliseconds when this hit object appears, relative to the beatmap start.
+</ParamField>
+
+<ParamField path="Samples" type="IList<HitSampleInfo>" required>
+  Audio samples played when the hit object is hit. Typically includes hitsounds like normal, whistle, finish, or clap.
+</ParamField>
+
+<ParamField path="HitWindows" type="HitWindows">
+  Defines timing windows for different judgement results (Perfect, Great, Good, Miss). Automatically scaled by Overall Difficulty (OD).
+</ParamField>
+
+## Creating Basic Hit Objects
+
+Here's a simple hit object with position:
+
+```csharp osu.Game.Rulesets.MyRuleset/Objects/MyHitObject.cs
+using osu.Game.Rulesets.Judgements;
+using osu.Game.Rulesets.Objects;
+using osu.Game.Rulesets.Objects.Types;
+using osuTK;
+
+namespace osu.Game.Rulesets.MyRuleset.Objects
+{
+    public class MyHitObject : HitObject, IHasPosition
+    {
+        // Position property from IHasPosition
+        public Vector2 Position { get; set; }
+        
+        public float X
+        {
+            get => Position.X;
+            set => Position = new Vector2(value, Y);
+        }
+        
+        public float Y
+        {
+            get => Position.Y;
+            set => Position = new Vector2(X, value);
+        }
+
+        // Define how this object is judged
+        public override Judgement CreateJudgement() => new Judgement();
+        
+        // Optionally customize hit windows
+        protected override HitWindows CreateHitWindows() => new HitWindows();
+    }
+}
+```
+
+## Hit Object Interfaces
+
+osu! provides several interfaces to add common functionality:
+
+### IHasPosition
+
+For hit objects with X/Y coordinates:
+
+```csharp
+public interface IHasPosition
+{
+    Vector2 Position { get; set; }
+    float X { get; set; }
+    float Y { get; set; }
+}
+```
+
+### IHasDuration
+
+For hit objects that last over time (like sliders or hold notes):
+
+```csharp
+public interface IHasDuration
+{
+    double EndTime { get; set; }
+    double Duration { get; set; }
+}
+```
+
+Example:
+
+```csharp
+public class MyLongNote : HitObject, IHasPosition, IHasDuration
+{
+    public Vector2 Position { get; set; }
+    
+    public double EndTime 
+    {
+        get => StartTime + Duration;
+        set => Duration = value - StartTime;
+    }
+    
+    public double Duration { get; set; }
+    
+    // X, Y properties...
+}
+```
+
+### IHasComboInformation
+
+For combo-based gameplay:
+
+```csharp
+public interface IHasComboInformation
+{
+    Bindable<int> ComboIndexBindable { get; }
+    Bindable<int> ComboIndexWithOffsetsBindable { get; }
+    Bindable<int> IndexInCurrentComboBindable { get; }
+    bool NewCombo { get; set; }
+    int ComboOffset { get; set; }
+}
+```
+
+### IHasPath
+
+For curved or slider-like objects:
+
+```csharp
+public interface IHasPath
+{
+    SliderPath Path { get; }
+    double Distance { get; set; }
+    List<IList<HitSampleInfo>> NodeSamples { get; }
+}
+```
+
+<Tip>
+Choose interfaces based on your gameplay mechanics. Most rulesets only need `IHasPosition` for basic objects.
+</Tip>
+
+## Nested Hit Objects
+
+Complex hit objects can contain nested objects that are judged separately:
+
+```csharp
+public class MyComplexObject : HitObject, IHasDuration
+{
+    public double EndTime { get; set; }
+    public double Duration { get; set; }
+    
+    protected override void CreateNestedHitObjects(CancellationToken cancellationToken)
+    {
+        base.CreateNestedHitObjects(cancellationToken);
+        
+        // Create nested objects at intervals
+        for (double time = StartTime; time <= EndTime; time += 1000)
+        {
+            AddNested(new MyTickObject
+            {
+                StartTime = time,
+                Samples = Samples,
+            });
+        }
+    }
+}
+
+public class MyTickObject : HitObject
+{
+    public override Judgement CreateJudgement() => new IgnoreJudgement();
+}
+```
+
+<Warning>
+Nested objects are created during `ApplyDefaults()`. Never create them in the constructor, as timing and difficulty settings won't be available yet.
+</Warning>
+
+## DrawableHitObject
+
+The visual representation handles rendering and input:
+
+```csharp osu.Game.Rulesets.MyRuleset/Objects/Drawables/DrawableMyHitObject.cs
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.Shapes;
+using osu.Game.Rulesets.Objects.Drawables;
+using osu.Game.Rulesets.Scoring;
+using osuTK;
+using osuTK.Graphics;
+
+namespace osu.Game.Rulesets.MyRuleset.Objects.Drawables
+{
+    public partial class DrawableMyHitObject : DrawableHitObject<MyHitObject>
+    {
+        private Circle circle;
+        
+        public DrawableMyHitObject()
+            : this(null)
+        {
+        }
+        
+        public DrawableMyHitObject(MyHitObject hitObject)
+            : base(hitObject)
+        {
+            Size = new Vector2(80);
+            Origin = Anchor.Centre;
+            
+            // Visual feedback based on state
+            AccentColour.BindValueChanged(accent => circle.Colour = accent.NewValue, true);
+        }
+
+        [BackgroundDependencyLoader]
+        private void load()
+        {
+            AddInternal(circle = new Circle
+            {
+                RelativeSizeAxes = Axes.Both,
+            });
+        }
+        
+        protected override void UpdateInitialTransforms()
+        {
+            base.UpdateInitialTransforms();
+            
+            // Fade in and scale
+            this.FadeIn(200).ScaleTo(1, 200);
+        }
+        
+        protected override void UpdateHitStateTransforms(ArmedState state)
+        {
+            base.UpdateHitStateTransforms(state);
+            
+            switch (state)
+            {
+                case ArmedState.Hit:
+                    this.FadeOut(100).ScaleTo(1.5f, 100);
+                    break;
+                    
+                case ArmedState.Miss:
+                    this.FadeOut(100).ScaleTo(0.5f, 100);
+                    break;
+            }
+        }
+        
+        protected override void CheckForResult(bool userTriggered, double timeOffset)
+        {
+            if (timeOffset >= 0)
+            {
+                // Hit too late
+                ApplyResult(r => r.Type = r.Judgement.MinResult);
+            }
+        }
+        
+        public override void OnPressed(MyRulesetAction action)
+        {
+            if (AllJudged)
+                return;
+                
+            // Check timing and apply result
+            if (UpdateResult(true))
+                HitAction = action;
+        }
+    }
+}
+```
+
+<ParamField path="UpdateInitialTransforms" type="method">
+  Called when the hit object first appears. Add entrance animations here.
+</ParamField>
+
+<ParamField path="UpdateHitStateTransforms" type="method">
+  Called when judged. Handle hit/miss animations based on `ArmedState`.
+</ParamField>
+
+<ParamField path="CheckForResult" type="method">
+  Automatically called to check if the object should be judged. Handle auto-miss conditions here.
+</ParamField>
+
+## Judgements and Scoring
+
+Define how hit objects contribute to the score:
+
+```csharp
+using osu.Game.Rulesets.Judgements;
+using osu.Game.Rulesets.Scoring;
+
+public class MyJudgement : Judgement
+{
+    // Define the maximum result this object can achieve
+    public override HitResult MaxResult => HitResult.Perfect;
+    
+    // Optional: Override health increase/decrease
+    protected override double HealthIncreaseFor(HitResult result)
+    {
+        switch (result)
+        {
+            case HitResult.Perfect:
+                return 0.01;
+            case HitResult.Miss:
+                return -0.05;
+            default:
+                return 0;
+        }
+    }
+}
+
+public class MyHitObject : HitObject
+{
+    public override Judgement CreateJudgement() => new MyJudgement();
+}
+```
+
+### Available HitResults
+
+```csharp
+public enum HitResult
+{
+    None,           // No result
+    Miss,           // Missed completely
+    Meh,            // 50 in osu!standard
+    Ok,             // 100 in osu!standard
+    Good,           // 200 in osu!mania
+    Great,          // 300 in osu!standard
+    Perfect,        // Rainbow 300 in osu!mania
+    SmallBonus,     // Small bonus score (spinner ticks)
+    LargeBonus,     // Large bonus score (spinner bonus)
+    IgnoreHit,      // Hit but not judged
+    IgnoreMiss,     // Miss but not judged
+    // ... more specialized types
+}
+```
+
+<Tip>
+Use `HitResult.Perfect` as the maximum for most objects. Reserve `HitResult.Great` for when you have both "perfect" and "great" timing windows.
+</Tip>
+
+## Hit Windows
+
+Customize timing windows for each judgement:
+
+```csharp
+using osu.Game.Rulesets.Scoring;
+
+public class MyHitWindows : HitWindows
+{
+    // Base timing windows at OD 5
+    private static readonly DifficultyRange[] my_ranges =
+    {
+        new DifficultyRange(HitResult.Perfect, 40, 30, 20),
+        new DifficultyRange(HitResult.Great, 80, 60, 40),
+        new DifficultyRange(HitResult.Ok, 120, 90, 60),
+        new DifficultyRange(HitResult.Meh, 160, 120, 80),
+        new DifficultyRange(HitResult.Miss, 200, 150, 100),
+    };
+    
+    public override bool IsHitResultAllowed(HitResult result)
+    {
+        switch (result)
+        {
+            case HitResult.Perfect:
+            case HitResult.Great:
+            case HitResult.Ok:
+            case HitResult.Meh:
+            case HitResult.Miss:
+                return true;
+                
+            default:
+                return false;
+        }
+    }
+    
+    protected override DifficultyRange[] GetRanges() => my_ranges;
+}
+```
+
+<ParamField path="DifficultyRange" type="struct">
+  Defines how a hit window scales with Overall Difficulty (OD).
+  
+  **Constructor**: `DifficultyRange(HitResult result, double min, double average, double max)`
+  - `min`: Window size at OD 10 (harder)
+  - `average`: Window size at OD 5
+  - `max`: Window size at OD 0 (easier)
+</ParamField>
+
+## Object Pooling
+
+For performance, register hit object pools in your playfield:
+
+```csharp
+public partial class MyPlayfield : Playfield
+{
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+        
+        // Register pools for each hit object type
+        RegisterPool<MyHitObject, DrawableMyHitObject>(50);
+        RegisterPool<MyLongNote, DrawableMyLongNote>(20);
+    }
+}
+```
+
+<Warning>
+Pool sizes should accommodate the maximum number of visible objects. Too small = allocations during gameplay. Too large = wasted memory.
+</Warning>
+
+## Testing Hit Objects
+
+Create test scenes to verify behavior:
+
+```csharp
+public partial class TestSceneMyHitObject : OsuTestScene
+{
+    [Test]
+    public void TestHitObject()
+    {
+        AddStep("Add hit object", () =>
+        {
+            Child = new DrawableMyHitObject(new MyHitObject
+            {
+                StartTime = Time.Current + 1000,
+                Position = new Vector2(256, 192),
+            })
+            {
+                Clock = new FramedClock(new StopwatchClock()),
+            };
+        });
+    }
+}
+```
+
+## Best Practices
+
+<Tip>
+**Separation of Concerns**: Keep data in `HitObject` and visuals in `DrawableHitObject`. Never put rendering logic in the data class.
+</Tip>
+
+<Tip>
+**Bindables for Dynamic Properties**: Use `BindableDouble`, `BindableVector2`, etc. for properties that might change during gameplay (useful for mods).
+</Tip>
+
+<Tip>
+**Judgement Timing**: Use `CheckForResult()` for auto-miss conditions and `OnPressed()` for player-triggered judgements.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Mods System" icon="sliders" href="/development/rulesets/mods">
+    Learn how to modify hit object behavior with mods
+  </Card>
+  
+  <Card title="Difficulty Calculation" icon="chart-line" href="/development/rulesets/difficulty">
+    Calculate difficulty based on hit object patterns
+  </Card>
+</CardGroup>

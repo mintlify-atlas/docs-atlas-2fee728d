@@ -1,0 +1,565 @@
+---
+title: "Mods System"
+description: "Create gameplay modifiers that alter mechanics, difficulty, and visual effects in custom rulesets"
+---
+
+## Overview
+
+Mods (modifiers) change how a beatmap is played by altering gameplay mechanics, difficulty, visuals, or audio. They range from difficulty adjustments like Double Time and Hard Rock to fun effects like Barrel Roll.
+
+Every mod inherits from the `Mod` base class and implements specific interfaces to apply its effects at different stages of gameplay.
+
+## Mod Base Class
+
+All mods inherit from `osu.Game.Rulesets.Mods.Mod`:
+
+```csharp
+public abstract class Mod : IMod
+{
+    // Identity
+    public abstract string Name { get; }
+    public abstract string Acronym { get; }
+    public abstract LocalisableString Description { get; }
+    
+    // Visual
+    public virtual IconUsage? Icon { get; }
+    public virtual string ExtendedIconInformation { get; }
+    
+    // Classification
+    public virtual ModType Type { get; }
+    
+    // Scoring
+    public abstract double ScoreMultiplier { get; }
+    
+    // Gameplay
+    public virtual bool HasImplementation { get; }
+    public virtual bool UserPlayable { get; }
+    public virtual bool Ranked { get; }
+    
+    // Multiplayer
+    public virtual bool ValidForMultiplayer { get; }
+    public virtual bool ValidForMultiplayerAsFreeMod { get; }
+    
+    // Configuration
+    public virtual bool RequiresConfiguration { get; }
+    public virtual Type[] IncompatibleMods { get; }
+    
+    // Settings
+    public virtual IEnumerable<(LocalisableString setting, LocalisableString value)> SettingDescription { get; }
+    public virtual bool UsesDefaultConfiguration { get; }
+}
+```
+
+<ParamField path="Acronym" type="string" required>
+  Short identifier displayed on the mod icon (e.g., "DT", "HD", "HR"). Should be 2-4 characters.
+</ParamField>
+
+<ParamField path="ScoreMultiplier" type="double" required>
+  Score multiplier applied when this mod is active. Use 1.0 for no change, > 1.0 for difficulty increase, < 1.0 for difficulty reduction.
+</ParamField>
+
+<ParamField path="Type" type="ModType" required>
+  Category of the mod. Determines where it appears in the mod selection menu.
+</ParamField>
+
+<ParamField path="IncompatibleMods" type="Type[]">
+  Array of mod types that cannot be enabled simultaneously with this mod.
+</ParamField>
+
+## Mod Types
+
+Mods are categorized by their purpose:
+
+```csharp
+public enum ModType
+{
+    DifficultyReduction,   // Makes the game easier (Easy, No Fail)
+    DifficultyIncrease,    // Makes the game harder (Hard Rock, Hidden, Double Time)
+    Conversion,            // Changes gameplay mechanics (Mirror, Random)
+    Automation,            // Autoplay and assists (Auto, Relax)
+    Fun,                   // Visual/audio effects (Barrel Roll, Wiggle)
+    System,                // Internal system mods (Touch Device, Score V2)
+}
+```
+
+## Creating Basic Mods
+
+Here's a simple mod that changes the score multiplier:
+
+```csharp osu.Game.Rulesets.MyRuleset/Mods/MyRulesetModEasy.cs
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Localisation;
+using osu.Game.Rulesets.Mods;
+
+namespace osu.Game.Rulesets.MyRuleset.Mods
+{
+    public class MyRulesetModEasy : ModEasy
+    {
+        public override string Name => "Easy";
+        public override string Acronym => "EZ";
+        public override IconUsage? Icon => FontAwesome.Solid.ChevronCircleDown;
+        public override ModType Type => ModType.DifficultyReduction;
+        public override LocalisableString Description => "Reduces overall difficulty";
+        public override double ScoreMultiplier => 0.5;
+    }
+}
+```
+
+<Tip>
+Extend built-in mod base classes like `ModEasy`, `ModDoubleTime`, or `ModHidden` when possible. They provide common functionality and ensure consistency.
+</Tip>
+
+## Mod Application Interfaces
+
+Mods use interfaces to apply effects at specific points in the game lifecycle:
+
+### IApplicableToHitObject
+
+Modify hit objects during beatmap conversion:
+
+```csharp
+public interface IApplicableToHitObject
+{
+    void ApplyToHitObject(HitObject hitObject);
+}
+```
+
+Example - Scale hit objects:
+
+```csharp
+public class MyRulesetModBig : Mod, IApplicableToHitObject
+{
+    public override string Name => "Big";
+    public override string Acronym => "BG";
+    public override LocalisableString Description => "Everything is BIGGER";
+    public override double ScoreMultiplier => 1.0;
+    public override ModType Type => ModType.Fun;
+    
+    public void ApplyToHitObject(HitObject hitObject)
+    {
+        // Scale up position values
+        if (hitObject is IHasPosition positionedObject)
+        {
+            positionedObject.Position *= 1.5f;
+        }
+    }
+}
+```
+
+### IApplicableToDifficulty
+
+Adjust difficulty settings:
+
+```csharp
+public interface IApplicableToDifficulty
+{
+    void ApplyToDifficulty(BeatmapDifficulty difficulty);
+}
+```
+
+Example - Hard Rock implementation:
+
+```csharp
+public class MyRulesetModHardRock : ModHardRock, IApplicableToDifficulty
+{
+    public override double ScoreMultiplier => 1.06;
+    
+    public void ApplyToDifficulty(BeatmapDifficulty difficulty)
+    {
+        // Increase approach rate, overall difficulty, etc.
+        difficulty.CircleSize = Math.Min(difficulty.CircleSize * 1.3f, 10);
+        difficulty.ApproachRate = Math.Min(difficulty.ApproachRate * 1.4f, 10);
+        difficulty.DrainRate = Math.Min(difficulty.DrainRate * 1.4f, 10);
+        difficulty.OverallDifficulty = Math.Min(difficulty.OverallDifficulty * 1.4f, 10);
+    }
+}
+```
+
+<Warning>
+Always clamp difficulty values to valid ranges (typically 0-10) to prevent undefined behavior.
+</Warning>
+
+### IApplicableToDrawableHitObject
+
+Modify visual hit objects as they're created:
+
+```csharp
+public interface IApplicableToDrawableHitObject
+{
+    void ApplyToDrawableHitObject(DrawableHitObject drawable);
+}
+```
+
+Example - Hidden mod:
+
+```csharp
+using osu.Game.Rulesets.Objects.Drawables;
+using osu.Framework.Graphics;
+
+public class MyRulesetModHidden : ModHidden, IApplicableToDrawableHitObject
+{
+    public override string Description => "Objects fade out before you hit them";
+    public override double ScoreMultiplier => 1.06;
+    
+    private const double fade_in_duration = 400;
+    private const double fade_out_duration = 600;
+    
+    public void ApplyToDrawableHitObject(DrawableHitObject drawable)
+    {
+        double fadeStartTime = drawable.HitObject.StartTime - fade_in_duration - fade_out_duration;
+        double fadeOutTime = drawable.HitObject.StartTime - fade_out_duration;
+        
+        using (drawable.BeginAbsoluteSequence(fadeStartTime))
+            drawable.FadeIn(fade_in_duration);
+            
+        using (drawable.BeginAbsoluteSequence(fadeOutTime))
+            drawable.FadeOut(fade_out_duration);
+    }
+}
+```
+
+### IApplicableToRate
+
+Change playback speed:
+
+```csharp
+public interface IApplicableToRate
+{
+    BindableNumber<double> SpeedChange { get; }
+}
+```
+
+Example - Double Time:
+
+```csharp
+using osu.Framework.Bindables;
+using osu.Framework.Audio;
+using osu.Game.Configuration;
+
+public abstract class ModDoubleTime : ModRateAdjust
+{
+    public override string Name => "Double Time";
+    public override string Acronym => "DT";
+    public override LocalisableString Description => "Zoooooooooom...";
+    public override ModType Type => ModType.DifficultyIncrease;
+    public override bool Ranked => SpeedChange.IsDefault;
+
+    [SettingSource("Speed increase", "The actual increase to apply")]
+    public override BindableNumber<double> SpeedChange { get; } = new BindableDouble(1.5)
+    {
+        MinValue = 1.01,
+        MaxValue = 2,
+        Precision = 0.01,
+    };
+
+    public override double ScoreMultiplier => 1.12;
+}
+```
+
+### IApplicableToScoreProcessor
+
+Modify scoring calculation:
+
+```csharp
+public interface IApplicableToScoreProcessor
+{
+    void ApplyToScoreProcessor(ScoreProcessor scoreProcessor);
+}
+```
+
+Example:
+
+```csharp
+public class MyRulesetModPerfect : ModPerfect, IApplicableToScoreProcessor
+{
+    public void ApplyToScoreProcessor(ScoreProcessor scoreProcessor)
+    {
+        // Fail on any non-perfect judgement
+        scoreProcessor.FailConditions += (_, result) => 
+            result.Type != result.Judgement.MaxResult;
+    }
+}
+```
+
+### IApplicableToDrawableRuleset
+
+Modify the entire playfield:
+
+```csharp
+public interface IApplicableToDrawableRuleset<TObject> where TObject : HitObject
+{
+    void ApplyToDrawableRuleset(DrawableRuleset<TObject> drawableRuleset);
+}
+```
+
+Example - Barrel Roll:
+
+```csharp
+public class MyRulesetModBarrelRoll : ModBarrelRoll<MyRulesetHitObject>
+{
+    // Playfield rotation is handled by base class
+    public override string Description => "The whole playfield is on a wheel!";
+}
+```
+
+## Mod Settings
+
+Add configurable settings to mods using the `[SettingSource]` attribute:
+
+```csharp
+using osu.Framework.Bindables;
+using osu.Game.Configuration;
+using osu.Game.Overlays.Settings;
+
+public class MyRulesetModDifficultyAdjust : ModDifficultyAdjust
+{
+    [SettingSource("Circle Size", "Override beatmap's circle size")]
+    public BindableNumber<float> CircleSize { get; } = new BindableFloatWithLimitExtension
+    {
+        MinValue = 0,
+        MaxValue = 10,
+        Precision = 0.1f,
+        Default = 5,
+        Value = 5,
+    };
+    
+    [SettingSource("Approach Rate", "Override beatmap's approach rate")]
+    public BindableNumber<float> ApproachRate { get; } = new BindableFloatWithLimitExtension
+    {
+        MinValue = 0,
+        MaxValue = 10,
+        Precision = 0.1f,
+        Default = 5,
+        Value = 5,
+    };
+    
+    public override void ApplyToDifficulty(BeatmapDifficulty difficulty)
+    {
+        if (!CircleSize.IsDefault)
+            difficulty.CircleSize = CircleSize.Value;
+            
+        if (!ApproachRate.IsDefault)
+            difficulty.ApproachRate = ApproachRate.Value;
+    }
+}
+```
+
+<ParamField path="SettingSource" type="attribute">
+  Marks a bindable property as a user-configurable setting.
+  
+  **Parameters:**
+  - `label`: Display name in settings panel
+  - `description`: Tooltip text
+  - `SettingControlType` (optional): Custom control type for complex settings
+</ParamField>
+
+## Autoplay Mods
+
+Autoplay mods generate replay data to play beatmaps automatically:
+
+```csharp osu.Game.Rulesets.MyRuleset/Mods/MyRulesetModAutoplay.cs
+using System.Collections.Generic;
+using osu.Game.Beatmaps;
+using osu.Game.Rulesets.Mods;
+using osu.Game.Rulesets.MyRuleset.Replays;
+
+public class MyRulesetModAutoplay : ModAutoplay
+{
+    public override ModReplayData CreateReplayData(IBeatmap beatmap, IReadOnlyList<Mod> mods)
+    {
+        return new ModReplayData(
+            new MyRulesetAutoGenerator(beatmap).Generate(), 
+            new ModCreatedUser { Username = "AutoPilot" }
+        );
+    }
+}
+```
+
+Implement the replay generator:
+
+```csharp osu.Game.Rulesets.MyRuleset/Replays/MyRulesetAutoGenerator.cs
+using System;
+using System.Linq;
+using osu.Game.Beatmaps;
+using osu.Game.Replays;
+using osu.Game.Rulesets.MyRuleset.Objects;
+using osu.Game.Rulesets.Replays;
+
+public class MyRulesetAutoGenerator : AutoGenerator<MyRulesetReplayFrame>
+{
+    public MyRulesetAutoGenerator(IBeatmap beatmap)
+        : base(beatmap)
+    {
+    }
+
+    public override Replay Generate()
+    {
+        var replay = new Replay();
+        
+        foreach (var hitObject in Beatmap.HitObjects.Cast<MyRulesetHitObject>())
+        {
+            // Add frame to press the button at the hit time
+            replay.Frames.Add(new MyRulesetReplayFrame
+            {
+                Time = hitObject.StartTime,
+                Position = hitObject.Position,
+                Actions = { MyRulesetAction.Button1 },
+            });
+            
+            // Release after a short time
+            replay.Frames.Add(new MyRulesetReplayFrame
+            {
+                Time = hitObject.StartTime + 50,
+                Position = hitObject.Position,
+            });
+        }
+        
+        return replay;
+    }
+}
+```
+
+## Mod Incompatibilities
+
+Prevent conflicting mods from being enabled together:
+
+```csharp
+public class MyRulesetModDoubleTime : ModDoubleTime
+{
+    public override Type[] IncompatibleMods => new[] 
+    { 
+        typeof(ModHalfTime),
+        typeof(ModDaycore),
+        typeof(ModAdaptiveSpeed),
+    };
+}
+
+public class MyRulesetModHalfTime : ModHalfTime
+{
+    public override Type[] IncompatibleMods => new[] 
+    { 
+        typeof(ModDoubleTime),
+        typeof(ModNightcore),
+        typeof(ModAdaptiveSpeed),
+    };
+}
+```
+
+<Warning>
+Incompatibility must be mutual. If mod A is incompatible with B, then B must also declare A as incompatible.
+</Warning>
+
+## Registering Mods
+
+Register all mods in your ruleset's `GetModsFor()` method:
+
+```csharp osu.Game.Rulesets.MyRuleset/MyRulesetRuleset.cs
+public override IEnumerable<Mod> GetModsFor(ModType type)
+{
+    switch (type)
+    {
+        case ModType.DifficultyReduction:
+            return new Mod[]
+            {
+                new MyRulesetModEasy(),
+                new MyRulesetModNoFail(),
+                new MultiMod(new MyRulesetModHalfTime(), new MyRulesetModDaycore()),
+            };
+
+        case ModType.DifficultyIncrease:
+            return new Mod[]
+            {
+                new MyRulesetModHardRock(),
+                new MultiMod(new MyRulesetModSuddenDeath(), new MyRulesetModPerfect()),
+                new MultiMod(new MyRulesetModDoubleTime(), new MyRulesetModNightcore()),
+                new MyRulesetModHidden(),
+                new MyRulesetModFlashlight(),
+            };
+
+        case ModType.Conversion:
+            return new Mod[]
+            {
+                new MyRulesetModMirror(),
+                new MyRulesetModRandom(),
+            };
+
+        case ModType.Automation:
+            return new Mod[]
+            {
+                new MultiMod(new MyRulesetModAutoplay(), new MyRulesetModCinema()),
+                new MyRulesetModRelax(),
+            };
+
+        case ModType.Fun:
+            return new Mod[]
+            {
+                new MyRulesetModBarrelRoll(),
+                new ModWindUp(),
+                new ModWindDown(),
+            };
+
+        case ModType.System:
+            return new Mod[]
+            {
+                new ModTouchDevice(),
+                new ModScoreV2(),
+            };
+
+        default:
+            return Array.Empty<Mod>();
+    }
+}
+```
+
+<Tip>
+Use `MultiMod` to group related mods that serve similar purposes (like SuddenDeath/Perfect or DoubleTime/Nightcore).
+</Tip>
+
+## Testing Mods
+
+Create test scenes to verify mod behavior:
+
+```csharp
+public partial class TestSceneMods : OsuTestScene
+{
+    [Test]
+    public void TestDoubleTime()
+    {
+        var ruleset = new MyRulesetRuleset();
+        var mod = ruleset.CreateMod<MyRulesetModDoubleTime>();
+        
+        AddAssert("Speed is 1.5x", () => mod.SpeedChange.Value == 1.5);
+        AddAssert("Score multiplier correct", () => mod.ScoreMultiplier == 1.12);
+    }
+}
+```
+
+## Best Practices
+
+<Tip>
+**Extend Base Classes**: Use built-in mod base classes (`ModDoubleTime`, `ModHidden`, etc.) for consistency and automatic updates.
+</Tip>
+
+<Tip>
+**Interface Order**: Apply effects at the correct stage using appropriate interfaces. Order matters: `IApplicableToHitObject` → `IApplicableToDifficulty` → `IApplicableToDrawableHitObject`.
+</Tip>
+
+<Tip>
+**Score Multipliers**: Use multipliers > 1.0 for difficulty increases, < 1.0 for reductions, and 1.0 for neutral mods. Follow osu!'s conventions (DT = 1.12, HD = 1.06, etc.).
+</Tip>
+
+<Warning>
+**Ranked Status**: Set `Ranked = false` for mods with custom settings or experimental features. Only default configurations should be ranked.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Difficulty Calculation" icon="chart-line" href="/development/rulesets/difficulty">
+    Learn how mods affect difficulty and performance calculation
+  </Card>
+  
+  <Card title="Hit Objects" icon="circle-dot" href="/development/rulesets/objects">
+    Understand how mods modify hit object behavior
+  </Card>
+</CardGroup>

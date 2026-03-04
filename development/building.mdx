@@ -1,0 +1,212 @@
+---
+title: Building osu!
+description: Build and run osu! from source code
+---
+
+# Building osu!
+
+This guide covers how to build and run osu! from source code using different methods.
+
+## Building from CLI
+
+### Quick Start
+
+The fastest way to build and run osu! is with a single command:
+
+```bash
+dotnet run --project osu.Desktop
+```
+
+This will:
+1. Restore NuGet packages
+2. Build the project
+3. Run the game
+
+### Release Build
+
+<Warning>
+  Always use Release configuration for performance testing.
+</Warning>
+
+When running locally for performance testing, use the Release configuration:
+
+```bash
+dotnet run --project osu.Desktop -c Release
+```
+
+The Debug configuration has significant overhead, especially when testing with local framework modifications.
+
+### Restoring NuGet Packages
+
+If the build fails, try restoring NuGet packages manually:
+
+```bash
+dotnet restore
+```
+
+## Building from an IDE
+
+<Steps>
+  <Step title="Open the solution file">
+    Load the appropriate platform-specific `.slnf` file:
+
+    <CodeGroup>
+    ```text Desktop
+    osu.Desktop.slnf
+    ```
+
+    ```text Android
+    osu.Android.slnf
+    ```
+
+    ```text iOS
+    osu.iOS.slnf
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Use IDE build functionality">
+    Use the provided Build/Run functionality in your IDE:
+
+    - **Visual Studio**: Press F5 or click Start
+    - **Rider**: Use the Run button or Shift+F10
+    - **VS Code**: Use the Run and Debug panel
+  </Step>
+
+  <Step title="Run tests (recommended)">
+    When testing or building new components, use the `osu! (Tests)` project/configuration.
+
+    This provides a faster feedback loop for development.
+  </Step>
+</Steps>
+
+## Build Configuration
+
+The project uses these key configuration files:
+
+### global.json
+
+```json
+{
+  "sdk": {
+    "version": "8.0.100",
+    "rollForward": "latestFeature",
+    "allowPrerelease": false
+  }
+}
+```
+
+### Directory.Build.props
+
+Key settings:
+- **Language Version**: C# 12.0
+- **Nullable**: Enabled
+- **Code Analysis**: Multiple analyzers enabled
+- **Documentation**: XML documentation generated for all projects
+
+## Testing with Local Framework Modifications
+
+<Note>
+  You can cross-test changes in osu-resources or osu-framework locally.
+</Note>
+
+Sometimes you may need to test changes in [osu-resources](https://github.com/ppy/osu-resources) or [osu-framework](https://github.com/ppy/osu-framework). Use these scripts:
+
+<CodeGroup>
+```powershell Windows
+UseLocalFramework.ps1
+UseLocalResources.ps1
+```
+
+```bash macOS / Linux
+UseLocalFramework.sh
+UseLocalResources.sh
+```
+</CodeGroup>
+
+### Project Structure Required
+
+These commands assume you have projects checked out in adjacent directories:
+
+```
+|- osu            // this repository
+|- osu-framework
+|- osu-resources
+```
+
+## Code Analysis
+
+Before committing code, run the code formatter:
+
+<CodeGroup>
+```bash Command Line
+dotnet format
+```
+
+```bash IDE
+Use the "Format code" command in your IDE
+```
+</CodeGroup>
+
+### Additional Analysis Tools
+
+The project uses several code analysis tools:
+
+- **Cross-platform analyzers**: Integrated into the compiler, provide warnings during editing and building
+- **JetBrains ReSharper InspectCode**: Run with `./InspectCode.ps1` or use Rider for inline support
+
+## Build Targets
+
+### Desktop Platforms
+
+<CardGroup cols={2}>
+  <Card title="Windows" icon="windows">
+    Windows 10+ (x64) - Primary development platform
+  </Card>
+  <Card title="macOS" icon="apple">
+    macOS 12+ (Intel and Apple Silicon)
+  </Card>
+  <Card title="Linux" icon="linux">
+    Linux (x64) via AppImage
+  </Card>
+</CardGroup>
+
+### Mobile Platforms
+
+<Warning>
+  Mobile builds require running `sudo dotnet workload restore` first.
+</Warning>
+
+- **Android**: 5+
+- **iOS/iPadOS**: 13.4+
+
+## Troubleshooting
+
+### Build Failures
+
+1. **Restore packages**: `dotnet restore`
+2. **Clean build**: `dotnet clean && dotnet build`
+3. **Check SDK version**: `dotnet --version` should be 8.0.100+
+
+### Performance Issues
+
+- Ensure you're using Release configuration: `-c Release`
+- Check for Debug mode overhead in your IDE settings
+
+### Mobile Build Issues
+
+Run the workload restore command:
+```bash
+sudo dotnet workload restore
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/development/architecture">
+    Learn about the codebase structure
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="https://github.com/ppy/osu/blob/master/CONTRIBUTING.md">
+    Read the contribution guidelines
+  </Card>
+</CardGroup>

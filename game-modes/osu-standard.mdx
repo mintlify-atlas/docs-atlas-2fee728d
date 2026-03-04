@@ -1,0 +1,342 @@
+---
+title: osu!standard
+description: The original osu! game mode - aim, click, and spin to the rhythm
+---
+
+osu!standard (also called "osu!" or "osu!std") is the original game mode. Players use a mouse or tablet to aim at hit objects and click them in time with the music.
+
+## Hit Objects
+
+osu!standard has three types of hit objects, all defined in `osu.Game.Rulesets.Osu/Objects/`:
+
+<CardGroup cols={3}>
+  <Card title="Hit Circles" icon="circle">
+    Single clickable circles that appear at a specific time
+  </Card>
+  <Card title="Sliders" icon="wave-pulse">
+    Curved paths that must be followed with continuous tracking
+  </Card>
+  <Card title="Spinners" icon="arrows-spin">
+    Circular objects requiring rapid cursor rotation
+  </Card>
+</CardGroup>
+
+### Hit Circles
+
+The simplest hit object - click when the approach circle reaches the outer ring.
+
+**Source:** `osu.Game.Rulesets.Osu/Objects/HitCircle.cs:9`
+
+```csharp
+public class HitCircle : OsuHitObject
+{
+    public override Judgement CreateJudgement() => new OsuJudgement();
+}
+```
+
+<Info>
+Hit circles inherit properties from `OsuHitObject` including position, stack height, and timing.
+</Info>
+
+### Sliders
+
+Sliders are complex objects consisting of multiple components:
+
+**Source:** `osu.Game.Rulesets.Osu/Objects/Slider.cs:26`
+
+```csharp
+public class Slider : OsuHitObject, IHasPathWithRepeats, IHasSliderVelocity, IHasGenerateTicks
+{
+    public double EndTime => StartTime + this.SpanCount() * Path.Distance / Velocity;
+    public SliderPath Path { get; set; }
+    public int RepeatCount { get; set; }
+    public double Velocity { get; private set; }
+    public double TickDistance { get; private set; }
+}
+```
+
+**Slider Components:**
+
+- **Head Circle**: Starting point (must be clicked)
+- **Slider Ball**: Follows the slider path
+- **Slider Ticks**: Small scoring points along the path
+- **Repeats**: Reverse arrows where the slider changes direction
+- **Tail Circle**: Ending point (must be tracked until completion)
+
+**Velocity Calculation** (`Slider.cs:158-170`):
+
+```csharp
+protected override void ApplyDefaultsToSelf(ControlPointInfo controlPointInfo, IBeatmapDifficultyInfo difficulty)
+{
+    base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+    
+    TimingControlPoint timingPoint = controlPointInfo.TimingPointAt(StartTime);
+    
+    Velocity = BASE_SCORING_DISTANCE * difficulty.SliderMultiplier 
+        / LegacyRulesetExtensions.GetPrecisionAdjustedBeatLength(this, timingPoint, OsuRuleset.SHORT_NAME);
+    
+    double scoringDistance = Velocity * timingPoint.BeatLength;
+    TickDistance = GenerateTicks 
+        ? (scoringDistance / difficulty.SliderTickRate * TickDistanceMultiplier) 
+        : double.PositiveInfinity;
+}
+```
+
+<Tip>
+Slider velocity is computed from base scoring distance (100 osu!pixels), slider multiplier, and timing points - this ensures consistent playability across different BPMs.
+</Tip>
+
+### Spinners
+
+Spinners require the player to rotate their cursor rapidly around the center.
+
+**Source:** `osu.Game.Rulesets.Osu/Objects/Spinner.cs:19`
+
+```csharp
+public class Spinner : OsuHitObject, IHasDuration
+{
+    // RPM required to clear at OD [0, 5, 10]
+    public static readonly DifficultyRange CLEAR_RPM_RANGE = new DifficultyRange(90, 150, 225);
+    
+    // RPM required for full score at OD [0, 5, 10]
+    public static readonly DifficultyRange COMPLETE_RPM_RANGE = new DifficultyRange(250, 380, 430);
+    
+    public double Duration { get; set; }
+    public int SpinsRequired { get; protected set; }
+    public int MaximumBonusSpins { get; protected set; }
+}
+```
+
+**Spin Requirements** (`Spinner.cs:61-78`):
+
+```csharp
+protected override void ApplyDefaultsToSelf(ControlPointInfo controlPointInfo, IBeatmapDifficultyInfo difficulty)
+{
+    base.ApplyDefaultsToSelf(controlPointInfo, difficulty);
+    
+    // Average RPS required to clear
+    double minRps = IBeatmapDifficultyInfo.DifficultyRange(
+        difficulty.OverallDifficulty, CLEAR_RPM_RANGE) / 60;
+    
+    // RPS required for full score
+    double maxRps = IBeatmapDifficultyInfo.DifficultyRange(
+        difficulty.OverallDifficulty, COMPLETE_RPM_RANGE) / 60;
+    
+    double secondsDuration = Duration / 1000;
+    
+    SpinsRequired = (int)(minRps * secondsDuration + 0.0001);
+    MaximumBonusSpins = Math.Max(0, (int)(maxRps * secondsDuration + 0.0001) 
+        - SpinsRequired - 2);
+}
+```
+
+## Scoring System
+
+osu!standard uses a hit-based scoring system with combo multipliers.
+
+### Hit Results
+
+**Source:** `OsuRuleset.cs:280-299`
+
+```csharp
+public override IEnumerable<HitResult> GetValidHitResults()
+{
+    return new[]
+    {
+        HitResult.Great,      // 300 points (within great window)
+        HitResult.Ok,         // 100 points (within ok window)
+        HitResult.Meh,        // 50 points (within meh window)
+        HitResult.Miss,       // 0 points (outside all windows)
+        
+        HitResult.LargeTickHit,  // Slider tick hit
+        HitResult.LargeTickMiss, // Slider tick miss
+        HitResult.SmallTickHit,  // Slider end hit
+        HitResult.SmallTickMiss, // Slider end miss
+        HitResult.SliderTailHit, // Slider tail tracked
+        HitResult.SmallBonus,    // Spinner spin
+        HitResult.LargeBonus,    // Spinner bonus
+    };
+}
+```
+
+### Accuracy Calculation
+
+Accuracy is the percentage of maximum possible judgement value achieved:
+
+```
+Accuracy = (50×n50 + 100×n100 + 300×n300) / (300×(n50 + n100 + n300 + nMiss))
+```
+
+### Combo System
+
+Combo increases with each hit object component:
+- Hit circles: +1 combo
+- Slider heads: +1 combo
+- Slider ticks: +1 combo each
+- Slider repeats: +1 combo each
+- Slider tail: +1 combo
+- Spinner spins: bonus score (doesn't affect combo)
+
+Missing breaks combo back to 0.
+
+## Hit Windows
+
+Timing windows vary by Overall Difficulty (OD):
+
+**Source:** `OsuRuleset.cs:386-388`
+
+| Judgement | OD 0 | OD 5 | OD 10 |
+|-----------|------|------|-------|
+| Great (300) | ±80ms | ±50ms | ±20ms |
+| Ok (100) | ±140ms | ±100ms | ±60ms |
+| Meh (50) | ±200ms | ±150ms | ±100ms |
+
+<Info>
+The hit window is defined in `OsuHitWindows.GREAT_WINDOW_RANGE` and scales based on OD settings.
+</Info>
+
+## Difficulty Attributes
+
+**Source:** `OsuRuleset.cs:393-453`
+
+osu!standard difficulty is based on several attributes:
+
+### Circle Size (CS)
+
+Affects the radius of hit circles:
+
+```csharp
+yield return new RulesetBeatmapAttribute("Circle Size", @"CS", 
+    originalDifficulty.CircleSize, effectiveDifficulty.CircleSize, 10)
+{
+    Description = "Affects the size of hit circles and sliders.",
+    AdditionalMetrics = [
+        new RulesetBeatmapAttribute.AdditionalMetric(
+            "Hit circle radius", 
+            (OsuHitObject.OBJECT_RADIUS 
+                * LegacyRulesetExtensions.CalculateScaleFromCircleSize(
+                    effectiveDifficulty.CircleSize, applyFudge: true)
+            ).ToLocalisableString("0.#")
+        )
+    ]
+};
+```
+
+### Approach Rate (AR)
+
+Controls how early objects appear:
+
+| AR | Preempt Time | Fade-in Duration |
+|----|--------------|------------------|
+| 0 | 1800ms | 1200ms |
+| 5 | 1200ms | 800ms |
+| 10 | 450ms | 300ms |
+
+### Overall Difficulty (OD)
+
+Affects hit windows and spinner requirements:
+
+```csharp
+yield return new RulesetBeatmapAttribute("Accuracy", @"OD", 
+    originalDifficulty.OverallDifficulty, effectiveDifficulty.OverallDifficulty, 10)
+{
+    Description = "Affects timing requirements for hit circles and spin speed requirements for spinners.",
+    AdditionalMetrics = hitWindows.GetAllAvailableWindows()
+        .Reverse()
+        .Select(window => new RulesetBeatmapAttribute.AdditionalMetric(
+            $"{window.result.GetDescription().ToUpperInvariant()} hit window",
+            LocalisableString.Interpolate($@"±{hitWindows.WindowFor(window.result) / rate:0.##} ms"),
+            colours.ForHitResult(window.result)
+        ))
+        .Concat([
+            new RulesetBeatmapAttribute.AdditionalMetric(
+                "RPM required to clear spinners", 
+                LocalisableString.Interpolate(
+                    $@"{IBeatmapDifficultyInfo.DifficultyRange(
+                        modAdjustedDifficulty.OverallDifficulty, 
+                        Spinner.CLEAR_RPM_RANGE):N0} RPM"
+                )
+            ),
+            new RulesetBeatmapAttribute.AdditionalMetric(
+                "RPM required to get full spinner bonus", 
+                LocalisableString.Interpolate(
+                    $@"{IBeatmapDifficultyInfo.DifficultyRange(
+                        modAdjustedDifficulty.OverallDifficulty, 
+                        Spinner.COMPLETE_RPM_RANGE):N0} RPM"
+                )
+            ),
+        ])
+};
+```
+
+### HP Drain
+
+Controls health loss rate and miss penalties.
+
+## Input Handling
+
+**Source:** `OsuRuleset.cs:68-75`
+
+```csharp
+public override IEnumerable<KeyBinding> GetDefaultKeyBindings(int variant = 0) => new[]
+{
+    new KeyBinding(InputKey.Z, OsuAction.LeftButton),
+    new KeyBinding(InputKey.X, OsuAction.RightButton),
+    new KeyBinding(InputKey.C, OsuAction.Smoke),
+    new KeyBinding(InputKey.MouseLeft, OsuAction.LeftButton),
+    new KeyBinding(InputKey.MouseRight, OsuAction.RightButton),
+};
+```
+
+### Control Methods
+
+- **Mouse**: Move cursor + click buttons
+- **Tablet**: Absolute positioning + pen tap or keyboard
+- **Keyboard Only**: Use ripple mod or automation mods
+- **Touch**: Direct touch input on supported devices
+
+## Unique Features
+
+### Slider Mechanics
+
+Sliders have two behavior modes (`Slider.cs:113-124`):
+
+```csharp
+public bool ClassicSliderBehaviour { get; set; }
+```
+
+- **Classic**: Proportional scoring based on components hit
+- **Modern**: All-or-nothing scoring on slider completion
+
+### Stacking
+
+Hit objects at the same position are visually offset to prevent overlap:
+
+```csharp
+public override Vector2 StackOffset => Vector2.Zero; // Spinners don't stack
+```
+
+### Follow Points
+
+Visual connectors between consecutive hit objects help with reading.
+
+## Performance Calculation
+
+osu!standard difficulty calculation evaluates:
+
+1. **Aim Skill**: Cursor movement and precision requirements
+2. **Speed Skill**: Clicking speed and streaming ability
+3. **Accuracy**: Timing precision
+4. **Flashlight**: Additional skill when Flashlight mod is active
+
+<Tip>
+The difficulty calculator is implemented in `osu.Game.Rulesets.Osu/Difficulty/OsuDifficultyCalculator.cs` and uses strain-based algorithms to evaluate these skills.
+</Tip>
+
+## Related Files
+
+- Main Ruleset: `osu.Game.Rulesets.Osu/OsuRuleset.cs`
+- Hit Objects: `osu.Game.Rulesets.Osu/Objects/`
+- Scoring: `osu.Game.Rulesets.Osu/Scoring/OsuScoreProcessor.cs`
+- Difficulty: `osu.Game.Rulesets.Osu/Difficulty/`
+- UI: `osu.Game.Rulesets.Osu/UI/DrawableOsuRuleset.cs`

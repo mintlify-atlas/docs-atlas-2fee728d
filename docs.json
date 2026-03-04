@@ -1,122 +1,108 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "osu!",
+  "theme": "almond",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#e96ba4",
+    "light": "#424242",
+    "dark": "#ecd9e1"
   },
-  "favicon": "/favicon.svg",
+
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/ppy/osu"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/ppy/osu"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "installation"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Game Modes",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "game-modes/overview",
+              "game-modes/osu-standard",
+              "game-modes/taiko",
+              "game-modes/catch",
+              "game-modes/mania"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Features",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "features/beatmaps",
+              "features/multiplayer",
+              "features/online-play",
+              "features/scoring-system",
+              "features/mods",
+              "features/skinning"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Community",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "community/leaderboards",
+              "community/tournaments",
+              "community/chat"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Development",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Getting Started",
             "pages": [
-              "api-reference/introduction"
+              "development/setup",
+              "development/building",
+              "development/architecture"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Custom Rulesets",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "development/rulesets/overview",
+              "development/rulesets/creating",
+              "development/rulesets/objects",
+              "development/rulesets/mods",
+              "development/rulesets/difficulty"
+            ]
+          },
+          {
+            "group": "Core Systems",
+            "pages": [
+              "development/systems/beatmap-processing",
+              "development/systems/gameplay",
+              "development/systems/ui-overlays",
+              "development/systems/input-handling"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/contributing/guidelines",
+              "development/contributing/code-style",
+              "development/contributing/testing"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

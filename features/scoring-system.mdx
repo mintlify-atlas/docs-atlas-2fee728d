@@ -1,0 +1,480 @@
+---
+title: Scoring System
+description: How scores are calculated, stored, and ranked in osu!
+---
+
+The scoring system handles all aspects of score tracking, from hit result statistics to performance point calculations. It supports both modern and legacy scoring formats.
+
+## Score Information
+
+The `ScoreInfo` class represents a single score (play) on a beatmap:
+
+```csharp
+public class ScoreInfo : RealmObject, IHasGuidPrimaryKey
+{
+    public Guid ID { get; set; }
+    public BeatmapInfo? BeatmapInfo { get; set; }
+    public string BeatmapHash { get; set; }
+    public RulesetInfo Ruleset { get; set; }
+    public long TotalScore { get; set; }
+    public double Accuracy { get; set; }
+    public ScoreRank Rank { get; set; }
+    public DateTimeOffset Date { get; set; }
+}
+```
+
+### Core Score Properties
+
+<Accordion title="Score Components">
+  <AccordionItem title="Score Values">
+    - **TotalScore**: Total points including mod multipliers
+    - **TotalScoreWithoutMods**: Base score without mod multipliers
+    - **LegacyTotalScore**: Preserved score for legacy plays
+    
+    ```csharp
+    public long TotalScore { get; set; }
+    public long TotalScoreWithoutMods { get; set; }
+    public long? LegacyTotalScore { get; set; }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Accuracy & Combo">
+    - **Accuracy**: Percentage accuracy (0.0 to 1.0)
+    - **MaxCombo**: Highest combo achieved
+    - **Combo**: Current combo (during gameplay)
+    
+    ```csharp
+    public double Accuracy { get; set; }
+    public int MaxCombo { get; set; }
+    public int Combo { get; set; }
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Performance">
+    - **PP**: Performance points awarded
+    - **Ranked**: Whether PP is counted toward player ranking
+    
+    ```csharp
+    public double? PP { get; set; }
+    public bool Ranked { get; set; }
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Score Ranks
+
+Scores are assigned letter grades based on accuracy and performance:
+
+<Steps>
+  <Step title="F Rank">
+    Failed to complete the beatmap.
+    
+    ```csharp
+    ScoreRank.F = -1
+    ```
+  </Step>
+  
+  <Step title="D Rank">
+    Completed with low accuracy.
+    
+    ```csharp
+    ScoreRank.D
+    ```
+  </Step>
+  
+  <Step title="C Rank">
+    Decent performance.
+    
+    ```csharp
+    ScoreRank.C
+    ```
+  </Step>
+  
+  <Step title="B Rank">
+    Good performance.
+    
+    ```csharp
+    ScoreRank.B
+    ```
+  </Step>
+  
+  <Step title="A Rank">
+    Great performance.
+    
+    ```csharp
+    ScoreRank.A
+    ```
+  </Step>
+  
+  <Step title="S Rank">
+    Excellent performance (no misses).
+    
+    ```csharp
+    ScoreRank.S
+    ```
+  </Step>
+  
+  <Step title="SH Rank (Silver S)">
+    S rank achieved with Hidden mod.
+    
+    ```csharp
+    ScoreRank.SH
+    ```
+  </Step>
+  
+  <Step title="X Rank (SS)">
+    Perfect accuracy (100%).
+    
+    ```csharp
+    ScoreRank.X
+    ```
+  </Step>
+  
+  <Step title="XH Rank (Silver SS)">
+    Perfect accuracy with Hidden mod.
+    
+    ```csharp
+    ScoreRank.XH
+    ```
+  </Step>
+</Steps>
+
+<Card title="Rank Display">
+Ranks are typically displayed as letters (D, C, B, A, S, SS) with silver variants for Hidden mod plays.
+</Card>
+
+## Hit Statistics
+
+Scores store detailed hit result statistics:
+
+```csharp
+public Dictionary<HitResult, int> Statistics { get; set; }
+public Dictionary<HitResult, int> MaximumStatistics { get; set; }
+```
+
+### Hit Results
+
+Different hit results contribute to score differently:
+
+<Accordion title="Hit Result Types">
+  <AccordionItem title="Perfect Hits">
+    - **Great**: Perfect timing
+    - **Perfect**: Exact timing (in some modes)
+  </AccordionItem>
+  
+  <AccordionItem title="Good Hits">
+    - **Ok/Good**: Slightly off timing
+    - **Meh**: Poor timing but still hit
+  </AccordionItem>
+  
+  <AccordionItem title="Misses">
+    - **Miss**: Missed the object entirely
+    - **SmallTickMiss**: Missed a slider tick
+    - **LargeTickMiss**: Missed a large slider tick
+  </AccordionItem>
+  
+  <AccordionItem title="Slider Components">
+    - **SliderTailHit**: Hit the slider end
+    - **SmallTickHit**: Hit a slider tick
+    - **LargeTickHit**: Hit a large slider tick
+  </AccordionItem>
+  
+  <AccordionItem title="Bonus">
+    - **SmallBonus**: Small bonus points (spinner ticks)
+    - **LargeBonus**: Large bonus points (spinner bonus)
+  </AccordionItem>
+</Accordion>
+
+### Statistics Display
+
+The system provides formatted statistics for display:
+
+```csharp
+public IEnumerable<HitResultDisplayStatistic> GetStatisticsForDisplay()
+{
+    foreach (var r in Ruleset.CreateInstance().GetHitResultsForDisplay())
+    {
+        int value = Statistics.GetValueOrDefault(r.result);
+        
+        // Special handling for different result types
+        switch (r.result)
+        {
+            case HitResult.SmallTickHit:
+            case HitResult.LargeTickHit:
+            case HitResult.SliderTailHit:
+                if (MaximumStatistics.TryGetValue(r.result, out int count) && count > 0)
+                    yield return new HitResultDisplayStatistic(
+                        r.result, value, count, r.displayName);
+                break;
+                
+            default:
+                yield return new HitResultDisplayStatistic(
+                    r.result, value, null, r.displayName);
+                break;
+        }
+    }
+}
+```
+
+<Note>
+Statistics are stored as JSON in the database and deserialized on demand for performance.
+</Note>
+
+## Score Versioning
+
+The scoring system has evolved over time. Scores track their version:
+
+```csharp
+public int TotalScoreVersion { get; set; } = LegacyScoreEncoder.LATEST_VERSION;
+public bool IsLegacyScore { get; set; }
+```
+
+<Card title="Version Tracking" icon="code-branch">
+The `TotalScoreVersion` indicates which scoring algorithm was used. This allows:
+- Recalculating old scores with new algorithms
+- Maintaining historical accuracy
+- Gradual migration to new systems
+</Card>
+
+<Warning>
+Scores with `BackgroundReprocessingFailed` set to true have failed conversion and won't be repeatedly processed:
+
+```csharp
+public bool BackgroundReprocessingFailed { get; set; }
+```
+</Warning>
+
+## Mods Applied
+
+Scores track which mods were active during the play:
+
+```csharp
+public Mod[] Mods { get; set; }
+public APIMod[] APIMods { get; set; }
+```
+
+Mods are stored as JSON and affect:
+- Score multiplier
+- Difficulty
+- PP calculation
+- Rank eligibility
+
+<Accordion title="Mod Storage">
+  <AccordionItem title="Internal Format">
+    Mods are stored as JSON in the database:
+    
+    ```csharp
+    public string ModsJson { get; set; } = string.Empty;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Accessing Mods">
+    Mods are automatically deserialized when accessed:
+    
+    ```csharp
+    var mods = scoreInfo.Mods; // Returns Mod[]
+    var apiMods = scoreInfo.APIMods; // Returns APIMod[]
+    ```
+  </AccordionItem>
+</Accordion>
+
+## User Information
+
+Scores track the player who set them:
+
+```csharp
+public RealmUser RealmUser { get; set; }
+public APIUser User { get; set; }
+public int UserID => RealmUser.OnlineID;
+```
+
+<Card title="User Data">
+The system maintains both realm-stored user data and API user data for compatibility.
+</Card>
+
+## Beatmap Association
+
+Scores are linked to beatmaps via hash matching:
+
+```csharp
+public BeatmapInfo? BeatmapInfo { get; set; }
+public string BeatmapHash { get; set; } = string.Empty;
+```
+
+<Note>
+Scores may have a null `BeatmapInfo` if:
+- The beatmap was deleted
+- The beatmap was modified (hash changed)
+- The beatmap isn't available locally
+
+The `BeatmapHash` preserves the association even when `BeatmapInfo` is null.
+</Note>
+
+## Online Identifiers
+
+Scores can have multiple online IDs for different systems:
+
+```csharp
+public long OnlineID { get; set; } = -1;        // Modern solo_scores table
+public long LegacyOnlineID { get; set; } = -1;  // Legacy osu_scores_*_high tables
+```
+
+<Card title="Online ID Migration">
+- **OnlineID**: Used by osu!lazer and modern web
+- **LegacyOnlineID**: Used by osu!stable and legacy systems
+</Card>
+
+## Replay Data
+
+Scores can have associated replay files:
+
+```csharp
+public IList<RealmNamedFileUsage> Files { get; } = null!;
+public string Hash { get; set; } = string.Empty;
+public bool HasOnlineReplay { get; set; }
+```
+
+### Replay Access
+
+<Steps>
+  <Step title="Check Availability">
+    Verify if a replay exists:
+    
+    ```csharp
+    if (score.HasOnlineReplay || score.Files.Count > 0)
+    {
+        // Replay available
+    }
+    ```
+  </Step>
+  
+  <Step title="Load Replay">
+    Load the replay file from storage using the file hash.
+  </Step>
+  
+  <Step title="Play Replay">
+    Use the replay data to recreate the play.
+  </Step>
+</Steps>
+
+## Hit Events
+
+During gameplay, detailed hit events are tracked:
+
+```csharp
+public List<HitEvent> HitEvents { get; set; } = new List<HitEvent>();
+```
+
+<Note>
+Hit events provide frame-by-frame accuracy data for advanced analysis but are not persisted to the database.
+</Note>
+
+## Score State
+
+Scores track various state flags:
+
+```csharp
+public bool Passed { get; set; } = true;  // Whether the play was completed
+public bool DeletePending { get; set; }    // Marked for deletion
+public int? Position { get; set; }         // Leaderboard position
+```
+
+## Pauses
+
+The system tracks when players paused during gameplay:
+
+```csharp
+public IList<int> Pauses { get; } = null!;
+```
+
+<Warning>
+Frequent pausing may affect score validity in competitive contexts.
+</Warning>
+
+## Client Version
+
+Scores record which version of the client was used:
+
+```csharp
+public string ClientVersion { get; set; } = string.Empty;
+```
+
+This helps track:
+- Compatibility issues
+- Feature availability
+- Bug investigation
+
+## Score Cloning
+
+Scores can be deep-cloned for various purposes:
+
+```csharp
+public ScoreInfo DeepClone()
+{
+    var clone = (ScoreInfo)this.Detach().MemberwiseClone();
+    
+    clone.Statistics = new Dictionary<HitResult, int>(clone.Statistics);
+    clone.MaximumStatistics = new Dictionary<HitResult, int>(clone.MaximumStatistics);
+    clone.HitEvents = new List<HitEvent>(clone.HitEvents);
+    clone.clearAllMods();
+    clone.ModsJson = ModsJson;
+    
+    return clone;
+}
+```
+
+<Card title="Clone Use Cases" icon="copy">
+- Displaying scores in UI without modifying originals
+- Simulating score changes
+- Testing score calculations
+</Card>
+
+## Score Import/Export
+
+The `ScoreManager` handles score operations:
+
+<Accordion title="Score Management Operations">
+  <AccordionItem title="Importing Scores">
+    Import scores from replay files:
+    
+    ```csharp
+    scoreManager.Import("path/to/replay.osr");
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Exporting Scores">
+    Export scores to replay files for sharing.
+  </AccordionItem>
+  
+  <AccordionItem title="Downloading Scores">
+    Download scores from online using `ScoreModelDownloader`.
+  </AccordionItem>
+</Accordion>
+
+## Legacy Score Handling
+
+The system supports legacy osu!stable scores:
+
+<Card title="Legacy Support">
+- **LegacyScoreDecoder**: Reads old replay formats
+- **LegacyScoreEncoder**: Writes old replay formats
+- **DatabasedLegacyScoreDecoder**: Handles database-stored legacy scores
+
+```csharp
+public bool IsLegacyScore { get; set; }
+public long? LegacyTotalScore { get; set; }
+```
+</Card>
+
+## Display Formatting
+
+Scores provide formatted display values:
+
+```csharp
+public LocalisableString DisplayAccuracy => Accuracy.FormatAccuracy();
+public override string ToString() => this.GetDisplayTitle();
+```
+
+<Note>
+Use these formatted values in UI to ensure consistent display across the game.
+</Note>

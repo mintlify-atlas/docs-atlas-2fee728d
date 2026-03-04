@@ -1,0 +1,359 @@
+---
+title: Multiplayer
+description: Real-time multiplayer system for playing osu! with others
+---
+
+The multiplayer system enables players to compete against each other in real-time matches. It supports various match types, team modes, and advanced features like countdowns and player invitations.
+
+## Match Types
+
+Multiplayer supports several different match formats to suit different playstyles:
+
+<Card title="Available Match Types" icon="users">
+  <Accordion>
+    <AccordionItem title="Head-to-Head">
+      Players compete individually for the highest score. Each player's performance is tracked separately.
+      
+      ```csharp
+      MatchType.HeadToHead
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Team Versus">
+      Players are divided into teams (typically Red vs Blue). Team scores are combined to determine the winner.
+      
+      ```csharp
+      MatchType.TeamVersus
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Matchmaking (Quick Play)">
+      Automated matchmaking system that pairs players of similar skill levels.
+      
+      ```csharp
+      MatchType.Matchmaking
+      ```
+    </AccordionItem>
+    
+    <AccordionItem title="Ranked Play">
+      Competitive ranked matchmaking with skill-based ratings.
+      
+      ```csharp
+      MatchType.RankedPlay
+      ```
+    </AccordionItem>
+  </Accordion>
+</Card>
+
+## Room Settings
+
+Multiplayer rooms are configured with various settings that control gameplay and user permissions:
+
+```csharp
+public class MultiplayerRoomSettings
+{
+    public string Name { get; set; } = "Unnamed room";
+    public string Password { get; set; } = string.Empty;
+    public MatchType MatchType { get; set; } = MatchType.HeadToHead;
+    public QueueMode QueueMode { get; set; } = QueueMode.HostOnly;
+    public TimeSpan AutoStartDuration { get; set; }
+    public bool AutoSkip { get; set; }
+}
+```
+
+### Queue Modes
+
+Queue modes determine who can add beatmaps to the playlist:
+
+<Steps>
+  <Step title="Host Only">
+    Only the room host can select and queue beatmaps.
+    
+    ```csharp
+    QueueMode.HostOnly
+    ```
+  </Step>
+  
+  <Step title="All Players">
+    Any player in the room can add beatmaps to the queue.
+    
+    ```csharp
+    QueueMode.AllPlayers
+    ```
+  </Step>
+  
+  <Step title="All Players (Round Robin)">
+    Players take turns selecting beatmaps in a round-robin fashion.
+    
+    ```csharp
+    QueueMode.AllPlayersRoundRobin
+    ```
+  </Step>
+</Steps>
+
+## Room Server Interface
+
+The `IMultiplayerRoomServer` interface defines all operations available to players in a multiplayer room:
+
+### Basic Room Operations
+
+<Card title="Room Management" icon="door-open">
+```csharp
+// Leave the current room
+Task LeaveRoom();
+
+// Transfer host to another player (host only)
+Task TransferHost(int userId);
+
+// Kick a user from the room (host only)
+Task KickUser(int userId);
+
+// Change room settings (host only)
+Task ChangeSettings(MultiplayerRoomSettings settings);
+```
+</Card>
+
+<Warning>
+Many operations are restricted to the host:
+- Transferring host
+- Kicking users
+- Changing room settings
+- Starting matches
+
+Attempting these operations as a non-host will throw a `NotHostException`.
+</Warning>
+
+### Player State Management
+
+Players can change their state within the room:
+
+```csharp
+// Change your ready/not ready state
+Task ChangeState(MultiplayerUserState newState);
+
+// Update beatmap download status
+Task ChangeBeatmapAvailability(BeatmapAvailability newBeatmapAvailability);
+
+// Change user preferences for beatmap/ruleset
+Task ChangeUserStyle(int? beatmapId, int? rulesetId);
+
+// Update selected mods
+Task ChangeUserMods(IEnumerable<APIMod> newMods);
+```
+
+<Note>
+The system tracks whether each player has the required beatmap downloaded. Players without the beatmap cannot participate until the download completes.
+</Note>
+
+### Playlist Management
+
+Depending on the queue mode, players can manage the playlist:
+
+<Accordion title="Playlist Operations">
+  <AccordionItem title="Add Playlist Item">
+    Add a new beatmap to the room's playlist:
+    
+    ```csharp
+    Task AddPlaylistItem(MultiplayerPlaylistItem item);
+    ```
+    
+    The item includes the beatmap, required mods, and allowed mods.
+  </AccordionItem>
+  
+  <AccordionItem title="Edit Playlist Item">
+    Modify an existing playlist item:
+    
+    ```csharp
+    Task EditPlaylistItem(MultiplayerPlaylistItem item);
+    ```
+    
+    The item must have a valid ID to be edited.
+  </AccordionItem>
+  
+  <AccordionItem title="Remove Playlist Item">
+    Remove a beatmap from the playlist:
+    
+    ```csharp
+    Task RemovePlaylistItem(long playlistItemId);
+    ```
+  </AccordionItem>
+</Accordion>
+
+## Match Control
+
+The host controls when matches start and can abort ongoing matches:
+
+<Card title="Match State Control">
+```csharp
+// Start the match (host only)
+Task StartMatch();
+
+// Abort an ongoing match (host only)
+Task AbortMatch();
+
+// Abort your own gameplay loading
+Task AbortGameplay();
+```
+</Card>
+
+<Steps>
+  <Step title="Pre-Match">
+    Players join the room, select mods, and mark themselves as ready.
+  </Step>
+  
+  <Step title="Starting">
+    Host initiates the match. All ready players begin loading the beatmap.
+  </Step>
+  
+  <Step title="Playing">
+    Players compete on the beatmap. Results are tracked in real-time.
+  </Step>
+  
+  <Step title="Results">
+    Match ends and scores are displayed. Room returns to pre-match state.
+  </Step>
+</Steps>
+
+## Countdown System
+
+Rooms support countdown timers for automatic match starts:
+
+### Match Start Countdown
+
+```csharp
+public class MatchStartCountdown
+{
+    public TimeSpan TimeRemaining { get; set; }
+}
+```
+
+The host can configure auto-start duration in room settings:
+
+```csharp
+public TimeSpan AutoStartDuration { get; set; }
+public bool AutoStartEnabled => AutoStartDuration != TimeSpan.Zero;
+```
+
+### Force Gameplay Start
+
+<Note>
+A special `ForceGameplayStartCountdown` can override player ready states and force the match to begin after the countdown expires.
+</Note>
+
+## Player Invitations
+
+Players can invite others to join their room:
+
+```csharp
+Task InvitePlayer(int userId);
+```
+
+<Warning>
+Invitations can fail with exceptions:
+- **UserBlockedException**: You or the invited user has blocked the other
+- **UserBlocksPMsException**: The invited user doesn't accept private messages
+</Warning>
+
+## Skip Voting
+
+Players can vote to skip the beatmap intro:
+
+```csharp
+Task VoteToSkipIntro();
+```
+
+Alternatively, the host can enable auto-skip in room settings:
+
+```csharp
+public bool AutoSkip { get; set; }
+```
+
+<Card title="Auto-Skip Behavior">
+When enabled, beatmap intros are automatically skipped for all players without requiring votes.
+</Card>
+
+## Match-Specific Requests
+
+Different match types support custom request types:
+
+```csharp
+Task SendMatchRequest(MatchUserRequest request);
+```
+
+### Team Versus
+
+In Team Versus mode, players can change teams:
+
+```csharp
+public class ChangeTeamRequest : MatchUserRequest
+{
+    public MultiplayerTeam Team { get; set; }
+}
+```
+
+### Ranked Play
+
+Ranked play includes additional features:
+
+<Card title="Ranked Play Features">
+- **Damage System**: Card-based damage dealing
+- **Stages**: Progressive difficulty stages
+- **User Rankings**: Skill-based ratings
+
+```csharp
+public class RankedPlayRoomState
+{
+    public RankedPlayStage Stage { get; set; }
+    public List<RankedPlayUserInfo> UserInfos { get; set; }
+}
+```
+</Card>
+
+### Matchmaking
+
+Quick play matchmaking tracks:
+
+```csharp
+public class MatchmakingRoomState
+{
+    public MatchmakingStage Stage { get; set; }
+    public MatchmakingUserList Users { get; set; }
+    public MatchmakingRoundList Rounds { get; set; }
+}
+```
+
+## Error Handling
+
+The multiplayer system uses specific exceptions to communicate errors:
+
+<Accordion title="Exception Types">
+  <AccordionItem title="NotHostException">
+    Thrown when a non-host player attempts a host-only operation.
+  </AccordionItem>
+  
+  <AccordionItem title="NotJoinedRoomException">
+    Thrown when attempting room operations while not in a room.
+  </AccordionItem>
+  
+  <AccordionItem title="InvalidStateException">
+    Thrown when an operation is invalid given the current game/room state.
+  </AccordionItem>
+  
+  <AccordionItem title="InvalidStateChangeException">
+    Thrown when a requested state change is not permitted.
+  </AccordionItem>
+  
+  <AccordionItem title="InvalidPasswordException">
+    Thrown when attempting to join a password-protected room with incorrect password.
+  </AccordionItem>
+</Accordion>
+
+## Best Practices
+
+<Card title="Implementation Tips" icon="lightbulb">
+1. **Always check host status** before attempting host-only operations
+2. **Handle exceptions gracefully** to provide good user feedback
+3. **Track player states** to ensure smooth match flow
+4. **Validate beatmap availability** before starting matches
+5. **Use appropriate queue modes** for your use case
+</Card>

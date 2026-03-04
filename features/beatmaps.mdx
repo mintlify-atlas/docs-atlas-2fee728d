@@ -1,0 +1,329 @@
+---
+title: Beatmaps
+description: Understanding the beatmap system in osu! - how beatmaps are stored, managed, and processed
+---
+
+Beatmaps are the core content of osu!, containing the gameplay patterns, metadata, and difficulty settings for each playable map. The beatmap system handles everything from importing and storing beatmaps to managing difficulty calculations and online status.
+
+## Beatmap Structure
+
+Each beatmap consists of several key components that define its identity and gameplay characteristics.
+
+### BeatmapInfo Model
+
+The `BeatmapInfo` class represents a single difficulty within a beatmap set. Key properties include:
+
+<Card title="Core Properties" icon="database">
+- **ID**: Unique GUID identifier
+- **DifficultyName**: The name of this specific difficulty (e.g., "Hard", "Expert")
+- **Ruleset**: The game mode (osu!, osu!taiko, osu!catch, osu!mania)
+- **Difficulty**: Difficulty settings object
+- **Metadata**: Song title, artist, mapper information
+- **Hash**: MD5 hash for version tracking
+</Card>
+
+```csharp
+public class BeatmapInfo : RealmObject
+{
+    public Guid ID { get; set; }
+    public string DifficultyName { get; set; }
+    public RulesetInfo Ruleset { get; set; }
+    public BeatmapDifficulty Difficulty { get; set; }
+    public BeatmapMetadata Metadata { get; set; }
+    public double StarRating { get; set; } = -1;
+    public double Length { get; set; }
+    public double BPM { get; set; }
+}
+```
+
+### Difficulty Settings
+
+Each beatmap has configurable difficulty parameters that affect gameplay:
+
+<Accordion title="Difficulty Parameters">
+  <AccordionItem title="Drain Rate (HP)">
+    Controls how quickly health depletes and how much health is recovered from hits. Default value is 5.
+    
+    ```csharp
+    public float DrainRate { get; set; } = 5;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Circle Size (CS)">
+    Determines the size of hit objects. Higher values mean smaller circles. Default value is 5.
+    
+    ```csharp
+    public float CircleSize { get; set; } = 5;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Overall Difficulty (OD)">
+    Affects the timing window for hitting objects accurately. Default value is 5.
+    
+    ```csharp
+    public float OverallDifficulty { get; set; } = 5;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Approach Rate (AR)">
+    Controls how long hit objects are visible before they need to be hit. Default value is 5.
+    
+    ```csharp
+    public float ApproachRate { get; set; } = 5;
+    ```
+  </AccordionItem>
+  
+  <AccordionItem title="Slider Settings">
+    - **SliderMultiplier**: Base slider velocity (default 1.4)
+    - **SliderTickRate**: Frequency of slider ticks (default 1)
+  </AccordionItem>
+</Accordion>
+
+## Beatmap Status
+
+Beatmaps can have different online statuses that affect their visibility and whether they grant performance points:
+
+<Steps>
+  <Step title="LocallyModified">
+    Beatmap has been edited locally via the editor. Online status changes are ignored.
+  </Step>
+  
+  <Step title="Pending">
+    Beatmap is uploaded but not yet ranked.
+  </Step>
+  
+  <Step title="Qualified">
+    Beatmap is in the qualification process for ranking.
+  </Step>
+  
+  <Step title="Ranked">
+    Official ranked status - grants performance points (PP).
+  </Step>
+  
+  <Step title="Approved">
+    Approved status - also grants performance points.
+  </Step>
+  
+  <Step title="Loved">
+    Community-loved beatmap - does not grant PP but appears in rankings.
+  </Step>
+</Steps>
+
+<Note>
+Only **Ranked** and **Approved** beatmaps grant performance points:
+
+```csharp
+public static bool GrantsPerformancePoints(this BeatmapOnlineStatus status)
+    => status == BeatmapOnlineStatus.Ranked || status == BeatmapOnlineStatus.Approved;
+```
+</Note>
+
+## Beatmap Management
+
+The `BeatmapManager` class handles all operations related to beatmap storage and retrieval.
+
+### Creating New Beatmaps
+
+<Card title="Creating a New Beatmap Set" icon="plus">
+```csharp
+public WorkingBeatmap CreateNew(RulesetInfo ruleset, APIUser user)
+{
+    var metadata = new BeatmapMetadata
+    {
+        Author = new RealmUser
+        {
+            OnlineID = user.OnlineID,
+            Username = user.Username,
+        }
+    };
+
+    var beatmapSet = new BeatmapSetInfo
+    {
+        DateAdded = DateTimeOffset.UtcNow,
+        Beatmaps = { new BeatmapInfo(ruleset, new BeatmapDifficulty(), metadata) }
+    };
+    
+    return GetWorkingBeatmap(imported.Beatmaps.First());
+}
+```
+</Card>
+
+### Adding Difficulties
+
+You can add new difficulties to existing beatmap sets in two ways:
+
+<Accordion title="Difficulty Creation Methods">
+  <AccordionItem title="CreateNewDifficulty">
+    Creates a fresh difficulty with default settings but preserves metadata and timing points from a reference beatmap.
+    
+    ```csharp
+    public virtual WorkingBeatmap CreateNewDifficulty(
+        BeatmapSetInfo targetBeatmapSet,
+        WorkingBeatmap referenceWorkingBeatmap,
+        RulesetInfo rulesetInfo)
+    ```
+    
+    This method is useful when starting a new difficulty from scratch while keeping the song's timing.
+  </AccordionItem>
+  
+  <AccordionItem title="CopyExistingDifficulty">
+    Creates a nearly-exact copy of an existing difficulty, including all hit objects and settings.
+    
+    ```csharp
+    public virtual WorkingBeatmap CopyExistingDifficulty(
+        BeatmapSetInfo targetBeatmapSet,
+        WorkingBeatmap referenceWorkingBeatmap)
+    ```
+    
+    The copy gets a new ID and "(copy)" suffix added to its difficulty name.
+  </AccordionItem>
+</Accordion>
+
+### Hiding and Restoring Difficulties
+
+<Card title="Difficulty Visibility Management">
+Difficulties can be hidden from song select while keeping them in the database:
+
+```csharp
+// Hide a difficulty (requires at least one other visible difficulty)
+public bool Hide(BeatmapInfo beatmapInfo)
+
+// Check if a difficulty can be hidden
+public bool CanHide(BeatmapInfo beatmapInfo)
+    => beatmapInfo.BeatmapSet!.Beatmaps.Count(b => !b.Hidden) > 1;
+
+// Restore a hidden difficulty
+public void Restore(BeatmapInfo beatmapInfo)
+
+// Restore all hidden difficulties
+public void RestoreAll()
+```
+</Card>
+
+<Warning>
+You cannot hide all difficulties in a beatmap set. At least one difficulty must remain visible.
+</Warning>
+
+## Importing and Exporting
+
+The beatmap system supports importing beatmaps from various sources and exporting them for sharing.
+
+### Import Operations
+
+<Steps>
+  <Step title="Import from File">
+    Import beatmaps from `.osz` or `.osu` files:
+    
+    ```csharp
+    public Task Import(params string[] paths)
+    ```
+  </Step>
+  
+  <Step title="Import as Update">
+    Update an existing beatmap with a new version:
+    
+    ```csharp
+    public Task<Live<BeatmapSetInfo>?> ImportAsUpdate(
+        ProgressNotification notification,
+        ImportTask importTask,
+        BeatmapSetInfo original)
+    ```
+  </Step>
+  
+  <Step title="External Editing">
+    Begin editing a beatmap with an external editor:
+    
+    ```csharp
+    public Task<ExternalEditOperation<BeatmapSetInfo>> BeginExternalEditing(
+        BeatmapSetInfo model)
+    ```
+  </Step>
+</Steps>
+
+### Export Operations
+
+<Card title="Export Formats">
+- **Standard Export**: Modern `.osz` format
+  ```csharp
+  public Task Export(BeatmapSetInfo beatmapSet)
+  ```
+
+- **Legacy Export**: Legacy format for compatibility
+  ```csharp
+  public Task ExportLegacy(BeatmapSetInfo beatmapSet)
+  public Task ExportLegacy(BeatmapInfo beatmap)
+  ```
+</Card>
+
+## Score Association
+
+Beatmaps maintain relationships with scores through hash matching:
+
+```csharp
+public void UpdateLocalScores(Realm realm)
+{
+    // Disassociate scores that no longer match
+    foreach (var score in Scores)
+        score.BeatmapInfo = null;
+
+    // Associate scores matching the current hash
+    foreach (var score in realm.All<ScoreInfo>().Where(s => s.BeatmapHash == Hash))
+        score.BeatmapInfo = this;
+}
+```
+
+<Note>
+Scores are matched to beatmaps via MD5 hash rather than ID, allowing scores to persist even when beatmaps are updated or reimported.
+</Note>
+
+## Collection Management
+
+When beatmaps are updated, their hashes change. The system automatically transfers collection references:
+
+```csharp
+public void TransferCollectionReferences(Realm realm, string previousMD5Hash)
+{
+    var collections = realm.All<BeatmapCollection>()
+        .Where(c => c.BeatmapMD5Hashes.Contains(previousMD5Hash));
+
+    foreach (var c in collections)
+    {
+        c.BeatmapMD5Hashes.Remove(previousMD5Hash);
+        c.BeatmapMD5Hashes.Add(MD5Hash);
+    }
+}
+```
+
+## Working Beatmaps
+
+The `WorkingBeatmap` represents a beatmap ready for gameplay, with loaded audio and textures:
+
+<Card title="Working Beatmap Cache">
+```csharp
+public WorkingBeatmap GetWorkingBeatmap(BeatmapInfo? beatmapInfo, bool refetch = false)
+{
+    if (beatmapInfo != null && refetch)
+        workingBeatmapCache.Invalidate(beatmapInfo);
+    
+    return workingBeatmapCache.GetWorkingBeatmap(beatmapInfo);
+}
+```
+
+The cache ensures that frequently-accessed beatmaps are kept in memory for better performance.
+</Card>
+
+## Video Management
+
+Beatmap sets may include background videos. The system provides tools to manage storage:
+
+```csharp
+// Delete all videos from all beatmap sets
+public void DeleteAllVideos()
+
+// Delete videos from specific beatmap sets
+public void DeleteVideos(List<BeatmapSetInfo> items, bool silent = false)
+```
+
+<Note>
+Deleting videos can significantly reduce storage usage while keeping the beatmaps playable.
+</Note>

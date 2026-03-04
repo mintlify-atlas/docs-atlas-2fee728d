@@ -1,0 +1,225 @@
+---
+title: "Custom Rulesets Overview"
+description: "Learn how to create custom gameplay modes for osu! by building your own rulesets"
+---
+
+## What are Rulesets?
+
+Rulesets are osu!'s architecture for creating custom gameplay modes. They allow developers to harness the power of the osu! beatmap library, game engine, and UI framework to create entirely new styles of gameplay.
+
+Each ruleset defines:
+- How beatmaps are converted and interpreted
+- What hit objects exist and how they're displayed
+- Input handling and player interaction
+- Scoring and judgement systems
+- Difficulty and performance calculation
+- Available mods and their effects
+
+## Core Architecture
+
+Every custom ruleset must inherit from the `Ruleset` base class and implement its abstract methods:
+
+```csharp
+public abstract class Ruleset
+{
+    // Identity
+    public abstract string Description { get; }
+    public abstract string ShortName { get; }
+    
+    // Core gameplay components
+    public abstract DrawableRuleset CreateDrawableRulesetWith(IBeatmap beatmap, IReadOnlyList<Mod>? mods = null);
+    public abstract IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap);
+    public abstract DifficultyCalculator CreateDifficultyCalculator(IWorkingBeatmap beatmap);
+    
+    // Mod system
+    public abstract IEnumerable<Mod> GetModsFor(ModType type);
+}
+```
+
+<Tip>
+Set `RulesetAPIVersionSupported` to `CURRENT_RULESET_API_VERSION` to ensure compatibility:
+
+```csharp
+public override string RulesetAPIVersionSupported => CURRENT_RULESET_API_VERSION;
+```
+</Tip>
+
+## Ruleset Components
+
+### 1. DrawableRuleset
+
+The visual gameplay implementation that renders hit objects and manages playfield interaction.
+
+**Location:** `osu.Game.Rulesets.UI.DrawableRuleset<TObject>`
+
+**Responsibilities:**
+- Manages the playfield and its components
+- Handles frame stability and timing
+- Processes input through the input manager
+- Coordinates with the scoring system
+
+### 2. HitObjects
+
+Define the elements players interact with during gameplay.
+
+**Base class:** `osu.Game.Rulesets.Objects.HitObject`
+
+**Key properties:**
+- `StartTime` - When the object appears
+- `Samples` - Audio samples to play
+- Implement interfaces like `IHasPosition`, `IHasDuration` for additional behavior
+
+### 3. BeatmapConverter
+
+Converts standard osu! beatmaps into ruleset-specific hit objects.
+
+**Base class:** `osu.Game.Beatmaps.BeatmapConverter<T>`
+
+**Methods:**
+- `CanConvert()` - Check if beatmap is compatible
+- `ConvertHitObject()` - Transform each hit object
+
+### 4. DifficultyCalculator
+
+Calculates star rating and difficulty attributes.
+
+**Base class:** `osu.Game.Rulesets.Difficulty.DifficultyCalculator`
+
+**Required methods:**
+- `CreateDifficultyAttributes()` - Generate difficulty results
+- `CreateDifficultyHitObjects()` - Prepare objects for analysis
+- `CreateSkills()` - Define difficulty calculation skills
+
+### 5. Mods
+
+Gameplay modifiers that alter mechanics, difficulty, or automation.
+
+**Base class:** `osu.Game.Rulesets.Mods.Mod`
+
+**Common mod types:**
+- `ModType.DifficultyIncrease` - Makes the game harder
+- `ModType.DifficultyReduction` - Makes the game easier
+- `ModType.Automation` - Autoplay and assist mods
+- `ModType.Conversion` - Changes gameplay mechanics
+- `ModType.Fun` - Visual or audio effects
+
+## Getting Started
+
+osu! provides official ruleset templates to help you get started quickly:
+
+<Steps>
+  <Step title="Install the templates">
+    Templates are available in the [osu! repository](https://github.com/ppy/osu/tree/master/Templates).
+    
+    ```bash
+    dotnet new install ppy.osu.Game.Templates
+    ```
+  </Step>
+  
+  <Step title="Create your ruleset">
+    Choose between two template types:
+    
+    **Freeform ruleset** - For gameplay like osu!standard or osu!mania
+    ```bash
+    dotnet new ruleset -n MyRuleset
+    ```
+    
+    **Scrolling ruleset** - For gameplay like osu!taiko or osu!catch
+    ```bash
+    dotnet new ruleset-scrolling -n MyRuleset
+    ```
+  </Step>
+  
+  <Step title="Build and test">
+    ```bash
+    cd MyRuleset
+    dotnet build
+    dotnet run --project osu.Game.Rulesets.MyRuleset.Tests
+    ```
+  </Step>
+</Steps>
+
+## Example: Pippidon Ruleset
+
+The included example ruleset demonstrates core concepts:
+
+```csharp osu.Game.Rulesets.Pippidon/PippidonRuleset.cs
+public class PippidonRuleset : Ruleset
+{
+    public override string Description => "gather the osu!coins";
+    public override string ShortName => "pippidon";
+
+    public override DrawableRuleset CreateDrawableRulesetWith(IBeatmap beatmap, IReadOnlyList<Mod> mods = null) =>
+        new DrawablePippidonRuleset(this, beatmap, mods);
+
+    public override IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap) =>
+        new PippidonBeatmapConverter(beatmap, this);
+
+    public override DifficultyCalculator CreateDifficultyCalculator(IWorkingBeatmap beatmap) =>
+        new PippidonDifficultyCalculator(RulesetInfo, beatmap);
+
+    public override IEnumerable<Mod> GetModsFor(ModType type)
+    {
+        switch (type)
+        {
+            case ModType.Automation:
+                return new[] { new PippidonModAutoplay() };
+            default:
+                return Array.Empty<Mod>();
+        }
+    }
+
+    public override string RulesetAPIVersionSupported => CURRENT_RULESET_API_VERSION;
+}
+```
+
+## Key Interfaces
+
+Many components use interfaces to provide specific functionality:
+
+### Hit Object Interfaces
+- `IHasPosition` - Objects with X/Y coordinates
+- `IHasDuration` - Objects with `EndTime`
+- `IHasPath` - Slider-like objects with curves
+- `IHasComboInformation` - Combo counter behavior
+- `IHasRepeats` - Repeating patterns
+
+### Mod Interfaces
+- `IApplicableToHitObject` - Modify hit objects
+- `IApplicableToDifficulty` - Adjust difficulty settings
+- `IApplicableToDrawableRuleset` - Modify playfield
+- `IApplicableToScoreProcessor` - Change scoring
+- `IApplicableToRate` - Alter playback speed
+
+<Warning>
+Mod interfaces determine when and how mods are applied. Implementing the wrong interface can cause your mod to not work or apply at the wrong time.
+</Warning>
+
+## Community Rulesets
+
+Explore existing custom rulesets for inspiration and learning:
+
+- [Custom Ruleset Directory](https://github.com/ppy/osu/discussions/13096)
+- Browse community-created gameplay modes
+- Learn from real-world implementations
+- Share your own creations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating a Ruleset" icon="hammer" href="/development/rulesets/creating">
+    Step-by-step guide to building your first ruleset
+  </Card>
+  
+  <Card title="Hit Objects" icon="circle-dot" href="/development/rulesets/objects">
+    Define gameplay elements and their behavior
+  </Card>
+  
+  <Card title="Mods System" icon="sliders" href="/development/rulesets/mods">
+    Create gameplay modifiers and effects
+  </Card>
+  
+  <Card title="Difficulty Calculation" icon="chart-line" href="/development/rulesets/difficulty">
+    Implement star rating and performance points
+  </Card>
+</CardGroup>

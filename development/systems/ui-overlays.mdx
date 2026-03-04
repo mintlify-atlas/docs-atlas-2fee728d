@@ -1,0 +1,512 @@
+---
+title: UI Overlays System
+description: Overlay architecture, HUD system, and popup management in osu!
+---
+
+The UI overlay system in osu! manages all popup interfaces, settings panels, notifications, and heads-up displays. It provides a consistent and extensible framework for displaying UI elements on top of game screens.
+
+## Overlay Architecture
+
+### Base Overlay Types
+
+osu! has several base overlay classes that provide different behaviors:
+
+#### WaveOverlayContainer
+
+Provides animated wave effects at the top of the overlay.
+
+**Features:**
+- Animated wave header
+- Smooth show/hide transitions
+- Edge shadow effects
+- Visibility state management
+
+#### FullscreenOverlay
+
+Base class for large, feature-rich overlays.
+
+**Location**: `osu.Game/Overlays/FullscreenOverlay.cs:19`
+
+```csharp
+public abstract partial class FullscreenOverlay<T> : WaveOverlayContainer, INamedOverlayComponent
+    where T : OverlayHeader
+{
+    // Icon, title, and description for toolbar
+    public virtual IconUsage Icon { get; }
+    public virtual LocalisableString Title { get; }
+    public virtual LocalisableString Description { get; }
+    
+    // Header component
+    public T Header { get; private set; }
+    
+    // Color scheme
+    protected readonly OverlayColourProvider ColourProvider;
+    protected virtual Color4 BackgroundColour => ColourProvider.Background5;
+    
+    protected abstract T CreateHeader();
+}
+```
+
+**Dimensions:**
+- Width: 85% of screen
+- Centered horizontally
+- Full height
+- Shadow radius: 10px
+
+<Info>
+  FullscreenOverlay uses an **OverlayColourProvider** to maintain consistent theming across all overlay components.
+</Info>
+
+#### OsuFocusedOverlayContainer
+
+Base for overlays that can receive input focus.
+
+**Features:**
+- Focus management
+- Click-away-to-close behavior
+- Keyboard navigation
+- Blocks input to underlying content when visible
+
+### Overlay Color Schemes
+
+Overlays use predefined color schemes for consistency:
+
+```csharp
+public enum OverlayColourScheme
+{
+    Purple,  // Default, settings
+    Blue,    // Beatmap listing
+    Pink,    // Profile, social
+    Green,   // Changelog
+    Orange,  // News
+    Red,     // Multiplayer
+    Aquamarine, // Rankings
+    Lime,    // Chat
+    Yellow,  // Wiki
+    Plum,    // Tournament
+}
+```
+
+Each scheme provides:
+- Background colors (1-6, darkest to lightest)
+- Content colors (1-4)
+- Foreground colors
+- Highlight colors
+
+## HUD System
+
+### HUDOverlay
+
+The `HUDOverlay` manages all gameplay HUD elements.
+
+**Location**: `osu.Game/Screens/Play/HUDOverlay.cs:35`
+
+```csharp
+[Cached]
+public partial class HUDOverlay : Container, IKeyBindingHandler<GlobalAction>
+{
+    // Core HUD elements
+    public readonly ModDisplay ModDisplay;
+    public readonly HoldForMenuButton HoldToQuit;
+    public readonly PlayerSettingsOverlay PlayerSettingsOverlay;
+    
+    // Controllers for HUD components
+    private readonly ClicksPerSecondController clicksPerSecondController;
+    public readonly InputCountController InputCountController;
+    private readonly JudgementCountController judgementCountController;
+    
+    // Visibility control
+    public Bindable<bool> ShowHud { get; } = new BindableBool();
+    public Bindable<bool> ShowHealthBar = new Bindable<bool>(true);
+    
+    // Layout containers for non-skinnable elements
+    public readonly FillFlowContainer TopLeftElements;
+    public readonly FillFlowContainer TopRightElements;
+    public readonly FillFlowContainer BottomRightElements;
+    
+    // Skinnable component containers
+    private readonly SkinnableContainer mainComponents;
+    private readonly SkinnableContainer rulesetComponents;
+}
+```
+
+<Card title="HUD Components" icon="display">
+  - **Health Bar**: Shows player health
+  - **Score Display**: Current score and accuracy
+  - **Combo Counter**: Current combo
+  - **Judgement Counter**: Hit statistics
+  - **Progress Bar**: Song progress
+  - **Key Overlay**: Input display
+  - **Mod Display**: Active mods
+  - **Hold to Quit**: Exit button
+</Card>
+
+#### HUD Visibility Modes
+
+```csharp
+public enum HUDVisibilityMode
+{
+    Never,            // Always hidden
+    HideDuringGameplay, // Hidden during active play
+    Always            // Always visible
+}
+```
+
+**Hold for HUD** (Ctrl key by default):
+- Temporarily shows HUD when held
+- Useful during gameplay when HUD is hidden
+- Does not affect permanent visibility setting
+
+### Skinnable Components
+
+HUD elements can be customized via the skin system:
+
+```csharp
+public class HUDComponentsContainer : SkinnableContainer
+{
+    public HUDComponentsContainer(GlobalSkinnableContainers target = GlobalSkinnableContainers.MainHUDComponents)
+        : base(new GlobalSkinnableContainerLookup(target))
+    {
+        RelativeSizeAxes = Axes.Both;
+        AlwaysPresent = true;
+    }
+}
+```
+
+**Skinnable Containers:**
+- `MainHUDComponents`: General HUD elements
+- Ruleset-specific components
+- `Playfield`: Elements drawn on the playfield
+
+## Common Overlays
+
+### SettingsOverlay
+
+The main settings panel for the game.
+
+**Location**: `osu.Game/Overlays/SettingsOverlay.cs:25`
+
+```csharp
+public partial class SettingsOverlay : SettingsPanel, INamedOverlayComponent
+{
+    protected override IEnumerable<SettingsSection> CreateSections()
+    {
+        return new List<SettingsSection>
+        {
+            new GeneralSection(),
+            new SkinSection(),
+            new InputSection(createSubPanel(new KeyBindingPanel())),
+            new UserInterfaceSection(),
+            new GameplaySection(),
+            new RulesetSection(),
+            new AudioSection(),
+            new GraphicsSection(),
+            new OnlineSection(),
+            new MaintenanceSection(),
+            new DebugSection()
+        };
+    }
+}
+```
+
+**Features:**
+- Sidebar navigation
+- Search functionality
+- Sub-panels (e.g., key binding editor)
+- Scrollable sections
+- Revert to default buttons
+
+<Info>
+  SettingsOverlay uses a **SettingsSectionsContainer** that automatically generates a sidebar from the sections and handles scrolling to specific settings.
+</Info>
+
+### SettingsPanel
+
+Base class for settings-style panels.
+
+**Location**: `osu.Game/Overlays/SettingsPanel.cs:30`
+
+**Layout:**
+```
+SettingsPanel (WIDTH = 600px)
+├── Sidebar (200px)
+│   └── Section buttons
+└── ContentContainer (400px)
+    ├── SearchTextBox
+    ├── Sections
+    └── Footer
+```
+
+**Key Features:**
+- Automatic section navigation
+- Search with real-time filtering
+- Smooth scrolling
+- Expandable/collapsible sidebar
+- Custom headers and footers
+
+### Notification System
+
+#### NotificationOverlay
+
+Displays popup notifications in the bottom-right corner.
+
+```csharp
+public partial class NotificationOverlay : OsuFocusedOverlayContainer
+{
+    // Post a new notification
+    public void Post(Notification notification);
+    
+    // Clear all notifications
+    public void Clear();
+}
+```
+
+**Notification Types:**
+- `SimpleNotification`: Basic text notification
+- `ProgressNotification`: Shows progress bar
+- `ProgressCompletionNotification`: Success/failure result
+- `SimpleErrorNotification`: Error message
+
+#### Example: Posting Notifications
+
+```csharp
+// Simple notification
+notifications.Post(new SimpleNotification
+{
+    Text = "Beatmap imported successfully",
+    Icon = FontAwesome.Solid.Check
+});
+
+// Progress notification
+var progress = new ProgressNotification
+{
+    Text = "Downloading beatmap...",
+    CompletionText = "Download complete!",
+    State = ProgressNotificationState.Active
+};
+notifications.Post(progress);
+
+// Update progress
+progress.Progress = 0.5f;
+progress.Text = "Downloading beatmap... 50%";
+
+// Complete
+progress.State = ProgressNotificationState.Completed;
+```
+
+### DialogOverlay
+
+Displays modal dialog boxes.
+
+```csharp
+public partial class DialogOverlay : OsuFocusedOverlayContainer, IDialogOverlay
+{
+    // Show a dialog
+    public void Push(PopupDialog dialog);
+    
+    // Get current dialog
+    public PopupDialog CurrentDialog { get; }
+}
+```
+
+**Dialog Types:**
+- Confirmation dialogs
+- Error dialogs
+- Delete confirmation
+- Warning dialogs
+
+### MusicController
+
+Controls background music playback.
+
+```csharp
+public partial class MusicController : Container
+{
+    // Current track
+    public IBindable<WorkingBeatmap> CurrentTrack { get; }
+    
+    // Playback control
+    public void Play();
+    public void Pause();
+    public void Next();
+    public void Previous();
+    
+    // Track position
+    public void SeekTo(double position);
+}
+```
+
+### VolumeOverlay
+
+Displays volume controls when volume keys are pressed.
+
+**Features:**
+- Master volume
+- Music volume
+- Effect volume
+- Auto-hide after inactivity
+
+## Overlay Management
+
+### IOverlayManager
+
+Central overlay coordination service.
+
+```csharp
+public interface IOverlayManager
+{
+    // Get overlay instance
+    IBindable<OverlayActivation> OverlayActivationMode { get; }
+    
+    // Show/hide overlays
+    void ShowOverlay<T>() where T : IOverlay;
+    void HideOverlay<T>() where T : IOverlay;
+    
+    // Toggle overlay
+    void ToggleOverlay<T>() where T : IOverlay;
+}
+```
+
+### Overlay Activation Modes
+
+```csharp
+public enum OverlayActivation
+{
+    All,          // All overlays can be shown
+    UserTriggered, // Only user-triggered overlays
+    Disabled      // No overlays allowed (e.g., during gameplay)
+}
+```
+
+<Warning>
+  During gameplay, overlay activation is set to **UserTriggered** to prevent automatic popups from interrupting play. Only explicitly triggered overlays (pause menu, etc.) are shown.
+</Warning>
+
+## Creating Custom Overlays
+
+### Example: Simple Overlay
+
+```csharp
+public partial class MyCustomOverlay : OsuFocusedOverlayContainer
+{
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        RelativeSizeAxes = Axes.Both;
+        
+        Children = new Drawable[]
+        {
+            new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = Color4.Black.Opacity(0.8f)
+            },
+            new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Padding = new MarginPadding(50),
+                Child = new FillFlowContainer
+                {
+                    AutoSizeAxes = Axes.Y,
+                    RelativeSizeAxes = Axes.X,
+                    Direction = FillDirection.Vertical,
+                    Spacing = new Vector2(20),
+                    Children = new Drawable[]
+                    {
+                        new SpriteText
+                        {
+                            Text = "My Custom Overlay",
+                            Font = OsuFont.GetFont(size: 30, weight: FontWeight.Bold)
+                        },
+                        new OsuButton
+                        {
+                            Text = "Close",
+                            Action = Hide
+                        }
+                    }
+                }
+            }
+        };
+    }
+    
+    protected override void PopIn()
+    {
+        this.FadeIn(300, Easing.OutQuint);
+    }
+    
+    protected override void PopOut()
+    {
+        this.FadeOut(300, Easing.OutQuint);
+    }
+}
+```
+
+### Example: Fullscreen Overlay with Header
+
+```csharp
+public partial class MyFullscreenOverlay : FullscreenOverlay<MyOverlayHeader>
+{
+    public MyFullscreenOverlay()
+        : base(OverlayColourScheme.Blue)
+    {
+    }
+    
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Child = new Container
+        {
+            RelativeSizeAxes = Axes.Both,
+            Padding = new MarginPadding { Top = 50 },
+            Child = new ScrollContainer
+            {
+                RelativeSizeAxes = Axes.Both,
+                Child = new FillFlowContainer
+                {
+                    AutoSizeAxes = Axes.Y,
+                    RelativeSizeAxes = Axes.X,
+                    Direction = FillDirection.Vertical,
+                    // Add content here
+                }
+            }
+        };
+    }
+    
+    protected override MyOverlayHeader CreateHeader() => new MyOverlayHeader();
+}
+
+public partial class MyOverlayHeader : OverlayHeader
+{
+    protected override OverlayTitle CreateTitle() => new MyOverlayTitle();
+}
+
+public partial class MyOverlayTitle : OverlayTitle
+{
+    public MyOverlayTitle()
+    {
+        Title = "My Overlay";
+        Description = "A custom overlay example";
+        Icon = FontAwesome.Solid.Star;
+    }
+}
+```
+
+## Best Practices
+
+<Card title="Overlay Design Guidelines" icon="check">
+  - Use **OverlayColourProvider** for consistent theming
+  - Implement smooth **PopIn/PopOut** animations (300ms standard)
+  - Respect **OverlayActivation** mode
+  - Use **AlwaysPresent = true** for containers that need constant updates
+  - Cache overlays in dependency injection for global access
+  - Handle **focus** properly to prevent input conflicts
+  - Implement **IKeyBindingHandler** for keyboard shortcuts
+</Card>
+
+## Related Systems
+
+- [Gameplay System](/development/systems/gameplay)
+- [Input Handling](/development/systems/input-handling)
+- Skin System
+- Dependency Injection
+- Screen Management

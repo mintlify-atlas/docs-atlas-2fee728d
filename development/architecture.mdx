@@ -1,0 +1,355 @@
+---
+title: Architecture Overview
+description: Understanding the osu! codebase architecture and structure
+---
+
+# Architecture Overview
+
+This guide explains the core architecture of osu!, including the main game class, screens, overlays, and rulesets system.
+
+## Core Architecture
+
+osu! is built on the [osu!framework](https://github.com/ppy/osu-framework), a custom game framework developed for the project. The architecture follows a modular design with clear separation of concerns.
+
+### OsuGame Class
+
+The `OsuGame` class (located at `osu.Game/OsuGame.cs:93`) is the heart of the application. It:
+
+- Extends `OsuGameBase` to add menus and binding logic
+- Implements multiple interfaces: `IKeyBindingHandler<GlobalAction>`, `ILocalUserPlayInfo`, `IPerformFromScreenRunner`, `IOverlayManager`, `ILinkHandler`
+- Manages the global game state and coordinates all major systems
+
+```csharp
+public partial class OsuGame : OsuGameBase, 
+    IKeyBindingHandler<GlobalAction>, 
+    ILocalUserPlayInfo, 
+    IPerformFromScreenRunner, 
+    IOverlayManager, 
+    ILinkHandler
+```
+
+### Key Components
+
+<CardGroup cols={2}>
+  <Card title="Screens" icon="display">
+    Full-screen views like MainMenu, SongSelect, and Player
+  </Card>
+  <Card title="Overlays" icon="layer-group">
+    Pop-up UI elements like Settings, Chat, and Notifications
+  </Card>
+  <Card title="Rulesets" icon="gamepad">
+    Game mode implementations (osu!, osu!taiko, osu!catch, osu!mania)
+  </Card>
+  <Card title="Framework" icon="code">
+    Core rendering, input, and audio systems
+  </Card>
+</CardGroup>
+
+## Screen System
+
+Screens represent full-screen game states and are managed by the `ScreenStack`.
+
+### Screen Stack
+
+The `OsuScreenStack` manages navigation between screens:
+
+```csharp
+protected OsuScreenStack ScreenStack;
+```
+
+Located at `osu.Game/OsuGame.cs:196`
+
+### Common Screens
+
+<Accordion title="Main Menu & Intro">
+  - **IntroScreen**: Initial splash screen when launching the game
+  - **MainMenu**: The main hub for navigation
+  - Located in `osu.Game/Screens/Menu/`
+</Accordion>
+
+<Accordion title="Song Selection">
+  - **SongSelect**: Browse and select beatmaps
+  - **SongSelectV2**: New version of song select
+  - Includes carousel, filters, and beatmap details
+  - Located in `osu.Game/Screens/Select/` and `osu.Game/Screens/SelectV2/`
+</Accordion>
+
+<Accordion title="Gameplay">
+  - **Player**: Main gameplay screen
+  - **ReplayPlayer**: Replay viewing screen
+  - Handles game logic, rendering, and scoring
+  - Located in `osu.Game/Screens/Play/`
+</Accordion>
+
+<Accordion title="Results">
+  - **SoloResultsScreen**: Display scores after gameplay
+  - **RankingScreen**: Show leaderboards and statistics
+  - Located in `osu.Game/Screens/Ranking/`
+</Accordion>
+
+<Accordion title="Editor">
+  - **Editor**: Beatmap editing interface
+  - Full-featured beatmap creation and modification
+  - Located in `osu.Game/Screens/Edit/`
+</Accordion>
+
+<Accordion title="Online Play">
+  - **Multiplayer**: Multiplayer match screens
+  - **Playlists**: Playlist/room management
+  - **DailyChallenge**: Daily challenge mode
+  - Located in `osu.Game/Screens/OnlinePlay/`
+</Accordion>
+
+### Screen Navigation
+
+Screens use a push/pop navigation model:
+
+```csharp
+screen.Push(new SongSelect());  // Navigate to new screen
+screen.Exit();                   // Return to previous screen
+```
+
+## Overlay System
+
+Overlays are UI elements that appear on top of screens without replacing them.
+
+### Major Overlays
+
+The `OsuGame` class manages several key overlays:
+
+<CodeGroup>
+```csharp Notifications
+protected readonly NotificationOverlay Notifications = new NotificationOverlay();
+```
+
+```csharp Settings
+protected SettingsOverlay Settings;
+```
+
+```csharp Toolbar
+public Toolbar Toolbar { get; private set; }
+```
+
+```csharp Chat
+private ChatOverlay chatOverlay;
+```
+
+```csharp Volume
+private VolumeOverlay volume;
+```
+
+```csharp Music
+private MusicController musicController;
+```
+</CodeGroup>
+
+### Overlay Management
+
+The `IOverlayManager` interface provides overlay registration and lifecycle management:
+
+- **RegisterBlockingOverlay**: Register overlays that can block interaction
+- **ShowBlockingOverlay**: Display a blocking overlay
+- **HideBlockingOverlay**: Hide a blocking overlay
+
+```csharp
+public void CloseAllOverlays(bool hideToolbar = true)
+{
+    foreach (var overlay in focusedOverlays)
+        overlay.Hide();
+
+    if (hideToolbar) Toolbar.Hide();
+}
+```
+
+Located at `osu.Game/OsuGame.cs:327`
+
+### Overlay Types
+
+<Steps>
+  <Step title="Focused Overlays">
+    Overlays that can receive focus and handle input exclusively (e.g., Settings, Mod Select)
+  </Step>
+  <Step title="Floating Overlays">
+    Non-blocking overlays that float above content (e.g., Now Playing, Chat)
+  </Step>
+  <Step title="Blocking Overlays">
+    Overlays that dim the background and block interaction (e.g., Dialog boxes)
+  </Step>
+</Steps>
+
+## Ruleset System
+
+<Note>
+  Rulesets are osu!'s plugin system for game modes.
+</Note>
+
+Rulesets define gameplay variations with their own mechanics, scoring, and UI.
+
+### Core Rulesets
+
+The game includes four official rulesets:
+
+1. **osu!standard** - Click circles to the beat
+2. **osu!taiko** - Drum rhythm game
+3. **osu!catch** - Catch falling fruit
+4. **osu!mania** - Vertical scrolling rhythm game
+
+### Ruleset Architecture
+
+Rulesets are loaded dynamically from assemblies:
+
+```csharp
+public abstract class Ruleset
+{
+    public abstract string Description { get; }
+    public abstract string ShortName { get; }
+    // ... game logic, UI, and scoring
+}
+```
+
+### Custom Rulesets
+
+<Warning>
+  Custom rulesets allow community-created game modes.
+</Warning>
+
+Developers can create custom rulesets to add new gameplay styles. See the [custom ruleset templates](https://github.com/ppy/osu/tree/master/Templates) and [directory](https://github.com/ppy/osu/discussions/13096).
+
+### Ruleset Components
+
+Each ruleset provides:
+
+- **HitObjects**: Gameplay objects (circles, sliders, etc.)
+- **Scoring**: Score calculation and judgement
+- **Mods**: Gameplay modifiers
+- **DrawableRuleset**: Rendering and playfield setup
+- **RulesetInputManager**: Input handling
+- **UI Components**: Health bars, combo display, etc.
+
+## Dependency Injection
+
+The game uses dependency injection extensively:
+
+```csharp
+[Cached(typeof(OsuGame))]
+public partial class OsuGame : OsuGameBase
+```
+
+Components can request dependencies via attributes:
+
+```csharp
+[Resolved]
+private FrameworkConfigManager frameworkConfig { get; set; }
+```
+
+## Key Systems
+
+### Beatmap Management
+
+- **BeatmapManager**: Imports, stores, and queries beatmaps
+- **WorkingBeatmap**: Represents a loaded beatmap with audio and background
+- **BeatmapStore**: Database access for beatmap metadata
+
+### Skinning
+
+- **SkinManager**: Manages skin loading and application
+- **ISkin**: Interface for skin resources
+- **LegacySkin**: Compatibility with osu!stable skins
+
+### Online Services
+
+- **IAPIProvider**: API communication with osu! servers
+- **ChatManager**: Chat and messaging
+- **MultiplayerClient**: Real-time multiplayer
+- **SpectatorClient**: Live spectating
+
+### Input Handling
+
+- **OsuUserInputManager**: Global input management
+- **KeyBindingContainer**: Customizable key bindings
+- **GlobalAction**: Application-wide actions
+
+## Configuration
+
+The project uses MSBuild properties defined in `Directory.Build.props`:
+
+- **C# Language Version**: 12.0
+- **Nullable Reference Types**: Enabled
+- **Code Analysis**: Multiple analyzers including Microsoft.CodeAnalysis.BannedApiAnalyzers
+- **Documentation Generation**: Enabled for all projects
+
+## Project Structure
+
+```
+osu/
+├── osu.Game/              # Core game logic
+│   ├── Screens/           # Screen implementations
+│   ├── Overlays/          # Overlay implementations
+│   ├── Rulesets/          # Ruleset system
+│   ├── Graphics/          # UI components
+│   ├── Beatmaps/          # Beatmap management
+│   ├── Scoring/           # Scoring system
+│   └── Online/            # Online services
+├── osu.Desktop/           # Desktop launcher
+├── osu.Android/           # Android platform
+├── osu.iOS/               # iOS platform
+├── osu.Game.Rulesets.*/   # Ruleset implementations
+└── osu.Game.Tests/        # Test suite
+```
+
+## Design Patterns
+
+### Component Lifecycle
+
+1. **Construction**: Create the component
+2. **Load**: `[BackgroundDependencyLoader]` methods execute
+3. **LoadComplete**: Component fully loaded
+4. **Update**: Per-frame updates
+5. **Dispose**: Cleanup resources
+
+### Event Handling
+
+The game uses bindables for reactive state management:
+
+```csharp
+public readonly Bindable<WorkingBeatmap> Beatmap = new Bindable<WorkingBeatmap>();
+
+Beatmap.BindValueChanged(beatmap => 
+{
+    // React to beatmap changes
+}, true);
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Async Loading">
+    Heavy resources load asynchronously to prevent frame drops
+  </Step>
+  <Step title="Object Pooling">
+    Frequently created objects use pooling to reduce allocations
+  </Step>
+  <Step title="Drawable Lifecycle">
+    Components are efficiently added/removed from the scene graph
+  </Step>
+  <Step title="Realm Database">
+    Uses Realm for fast, reactive database access
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Contributing Guide" icon="code-pull-request" href="https://github.com/ppy/osu/blob/master/CONTRIBUTING.md">
+    Learn how to contribute to osu!
+  </Card>
+  <Card title="Custom Rulesets" icon="puzzle-piece" href="https://github.com/ppy/osu/tree/master/Templates">
+    Create your own game mode
+  </Card>
+  <Card title="Project Management" icon="tasks" href="https://github.com/ppy/osu/wiki/Project-management">
+    Understand the development workflow
+  </Card>
+  <Card title="osu!framework" icon="code" href="https://github.com/ppy/osu-framework">
+    Explore the underlying framework
+  </Card>
+</CardGroup>

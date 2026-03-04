@@ -1,0 +1,391 @@
+---
+title: "Creating a Custom Ruleset"
+description: "Step-by-step guide to building your first osu! custom ruleset from scratch"
+---
+
+## Prerequisites
+
+Before creating a custom ruleset, ensure you have:
+
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download) or later
+- An IDE (Visual Studio, JetBrains Rider, or VS Code)
+- Basic understanding of C# and object-oriented programming
+- Familiarity with osu! gameplay concepts
+
+## Project Setup
+
+<Steps>
+  <Step title="Install the ruleset templates">
+    osu! provides official templates to scaffold your ruleset project:
+    
+    ```bash
+    dotnet new install ppy.osu.Game.Templates
+    ```
+    
+    Verify installation:
+    ```bash
+    dotnet new list | grep ruleset
+    ```
+  </Step>
+  
+  <Step title="Create your ruleset project">
+    Choose the appropriate template for your gameplay style:
+    
+    **For freeform gameplay** (like osu!standard):
+    ```bash
+    dotnet new ruleset -n MyAwesomeRuleset
+    ```
+    
+    **For scrolling gameplay** (like osu!taiko or osu!catch):
+    ```bash
+    dotnet new ruleset-scrolling -n MyAwesomeRuleset
+    ```
+    
+    This creates:
+    - `osu.Game.Rulesets.MyAwesomeRuleset/` - Main ruleset project
+    - `osu.Game.Rulesets.MyAwesomeRuleset.Tests/` - Test project
+    - Solution and configuration files
+  </Step>
+  
+  <Step title="Build the project">
+    ```bash
+    cd MyAwesomeRuleset
+    dotnet build
+    ```
+    
+    Run the test project to see your ruleset in action:
+    ```bash
+    dotnet run --project osu.Game.Rulesets.MyAwesomeRuleset.Tests
+    ```
+  </Step>
+</Steps>
+
+## Project Structure
+
+The generated project includes these key components:
+
+```
+osu.Game.Rulesets.MyAwesomeRuleset/
+├── Beatmaps/
+│   └── MyAwesomeRulesetBeatmapConverter.cs    # Beatmap conversion
+├── Mods/
+│   └── MyAwesomeRulesetModAutoplay.cs         # Autoplay mod
+├── Objects/
+│   ├── MyAwesomeRulesetHitObject.cs           # Hit object data
+│   └── Drawables/
+│       └── DrawableMyAwesomeRulesetHitObject.cs  # Visual representation
+├── UI/
+│   ├── DrawableMyAwesomeRulesetRuleset.cs     # Main gameplay view
+│   └── MyAwesomeRulesetPlayfield.cs           # Playfield
+├── MyAwesomeRulesetDifficultyCalculator.cs    # Difficulty calculation
+├── MyAwesomeRulesetInputManager.cs            # Input handling
+└── MyAwesomeRulesetRuleset.cs                 # Ruleset entry point
+```
+
+## Core Ruleset Class
+
+The main ruleset class is the entry point for your gameplay mode:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset/MyAwesomeRulesetRuleset.cs
+public class MyAwesomeRulesetRuleset : Ruleset
+{
+    // Display name shown in the game
+    public override string Description => "My Awesome Gameplay Mode";
+    
+    // Short identifier used in URLs and file names
+    public override string ShortName => "awesome";
+    
+    // API version for compatibility tracking
+    public override string RulesetAPIVersionSupported => CURRENT_RULESET_API_VERSION;
+
+    // Create the visual gameplay instance
+    public override DrawableRuleset CreateDrawableRulesetWith(IBeatmap beatmap, IReadOnlyList<Mod> mods = null)
+    {
+        return new DrawableMyAwesomeRulesetRuleset(this, beatmap, mods);
+    }
+
+    // Create the beatmap converter
+    public override IBeatmapConverter CreateBeatmapConverter(IBeatmap beatmap)
+    {
+        return new MyAwesomeRulesetBeatmapConverter(beatmap, this);
+    }
+
+    // Create the difficulty calculator
+    public override DifficultyCalculator CreateDifficultyCalculator(IWorkingBeatmap beatmap)
+    {
+        return new MyAwesomeRulesetDifficultyCalculator(RulesetInfo, beatmap);
+    }
+
+    // Define available mods
+    public override IEnumerable<Mod> GetModsFor(ModType type)
+    {
+        switch (type)
+        {
+            case ModType.Automation:
+                return new[] { new MyAwesomeRulesetModAutoplay() };
+                
+            case ModType.DifficultyIncrease:
+                return new Mod[]
+                {
+                    new ModHardRock(),
+                    new ModSuddenDeath(),
+                    new ModPerfect(),
+                };
+                
+            case ModType.DifficultyReduction:
+                return new Mod[]
+                {
+                    new ModEasy(),
+                    new ModNoFail(),
+                };
+                
+            default:
+                return Array.Empty<Mod>();
+        }
+    }
+
+    // Define input key bindings
+    public override IEnumerable<KeyBinding> GetDefaultKeyBindings(int variant = 0) => new[]
+    {
+        new KeyBinding(InputKey.Z, MyAwesomeRulesetAction.Button1),
+        new KeyBinding(InputKey.X, MyAwesomeRulesetAction.Button2),
+    };
+
+    // Create the ruleset icon
+    public override Drawable CreateIcon() => new MyAwesomeRulesetIcon(this);
+}
+```
+
+<ParamField path="Description" type="string" required>
+  The full display name of your ruleset shown in menus and selection screens.
+</ParamField>
+
+<ParamField path="ShortName" type="string" required>
+  A unique short identifier (lowercase, no spaces) used in URLs, file paths, and online requests. Should be unique across all rulesets.
+</ParamField>
+
+<ParamField path="RulesetAPIVersionSupported" type="string" required>
+  Always set to `CURRENT_RULESET_API_VERSION` to maintain compatibility with the latest osu! version. See the [breaking changes wiki](https://github.com/ppy/osu/wiki/Breaking-Changes) for migration guides.
+</ParamField>
+
+## Implementing DrawableRuleset
+
+The `DrawableRuleset` manages the visual gameplay and playfield:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset/UI/DrawableMyAwesomeRulesetRuleset.cs
+public partial class DrawableMyAwesomeRulesetRuleset : DrawableRuleset<MyAwesomeRulesetHitObject>
+{
+    public DrawableMyAwesomeRulesetRuleset(
+        MyAwesomeRulesetRuleset ruleset,
+        IBeatmap beatmap,
+        IReadOnlyList<Mod> mods = null)
+        : base(ruleset, beatmap, mods)
+    {
+    }
+
+    // Create the playfield that holds hit objects
+    protected override Playfield CreatePlayfield() => new MyAwesomeRulesetPlayfield();
+
+    // Create the input manager for handling player input
+    protected override PassThroughInputManager CreateInputManager() => 
+        new MyAwesomeRulesetInputManager(Ruleset.RulesetInfo);
+
+    // Create the playfield adjustment container for scaling/positioning
+    protected override PlayfieldAdjustmentContainer CreatePlayfieldAdjustmentContainer() => 
+        new MyAwesomeRulesetPlayfieldAdjustmentContainer();
+}
+```
+
+## Creating the Playfield
+
+The playfield is where hit objects are displayed:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset/UI/MyAwesomeRulesetPlayfield.cs
+public partial class MyAwesomeRulesetPlayfield : Playfield
+{
+    private readonly Container hitObjectContainer;
+
+    public MyAwesomeRulesetPlayfield()
+    {
+        // Add any visual components to your playfield
+        InternalChildren = new Drawable[]
+        {
+            new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Alpha = 0.5f,
+            },
+            hitObjectContainer = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+            },
+        };
+    }
+
+    // Register where hit objects should be added
+    protected override void LoadComplete()
+    {
+        base.LoadComplete();
+        
+        // Hit objects are automatically added to this container
+        RegisterPool<MyAwesomeRulesetHitObject, DrawableMyAwesomeRulesetHitObject>(10);
+    }
+}
+```
+
+<Tip>
+Use object pooling with `RegisterPool<THitObject, TDrawable>()` for better performance, especially with many hit objects.
+</Tip>
+
+## Beatmap Conversion
+
+Convert standard osu! beatmaps to your ruleset format:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset/Beatmaps/MyAwesomeRulesetBeatmapConverter.cs
+public class MyAwesomeRulesetBeatmapConverter : BeatmapConverter<MyAwesomeRulesetHitObject>
+{
+    public MyAwesomeRulesetBeatmapConverter(IBeatmap beatmap, Ruleset ruleset)
+        : base(beatmap, ruleset)
+    {
+    }
+
+    // Check if this beatmap can be converted
+    public override bool CanConvert() => Beatmap.HitObjects.All(h => h is IHasPosition);
+
+    // Convert each hit object
+    protected override IEnumerable<MyAwesomeRulesetHitObject> ConvertHitObject(
+        HitObject original,
+        IBeatmap beatmap,
+        CancellationToken cancellationToken)
+    {
+        yield return new MyAwesomeRulesetHitObject
+        {
+            StartTime = original.StartTime,
+            Position = (original as IHasPosition)?.Position ?? Vector2.Zero,
+            Samples = original.Samples,
+        };
+    }
+}
+```
+
+<Warning>
+Always implement `CanConvert()` to check if a beatmap is compatible with your ruleset. Return `false` for incompatible beatmaps to prevent errors.
+</Warning>
+
+## Input Management
+
+Define input actions and handle player input:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset/MyAwesomeRulesetInputManager.cs
+public enum MyAwesomeRulesetAction
+{
+    [Description("Button 1")]
+    Button1,
+    
+    [Description("Button 2")]
+    Button2,
+}
+
+public partial class MyAwesomeRulesetInputManager : RulesetInputManager<MyAwesomeRulesetAction>
+{
+    public MyAwesomeRulesetInputManager(RulesetInfo ruleset)
+        : base(ruleset, 0, SimultaneousBindingMode.Unique)
+    {
+    }
+}
+```
+
+## Testing Your Ruleset
+
+The test project includes visual test scenes:
+
+```csharp osu.Game.Rulesets.MyAwesomeRuleset.Tests/TestSceneOsuPlayer.cs
+public partial class TestSceneOsuPlayer : PlayerTestScene
+{
+    protected override Ruleset CreatePlayerRuleset() => new MyAwesomeRulesetRuleset();
+
+    [Test]
+    public void TestGameplay()
+    {
+        // Your tests here
+    }
+}
+```
+
+<Steps>
+  <Step title="Run the test project">
+    ```bash
+    dotnet run --project osu.Game.Rulesets.MyAwesomeRuleset.Tests
+    ```
+  </Step>
+  
+  <Step title="Select test scenes">
+    Use the test browser to select different test scenarios.
+  </Step>
+  
+  <Step title="Test with real beatmaps">
+    Import beatmaps and test conversion and gameplay.
+  </Step>
+</Steps>
+
+## Packaging for Distribution
+
+To share your ruleset with others:
+
+<Steps>
+  <Step title="Build in release mode">
+    ```bash
+    dotnet build -c Release
+    ```
+  </Step>
+  
+  <Step title="Locate the DLL">
+    Find the built DLL in:
+    ```
+    osu.Game.Rulesets.MyAwesomeRuleset/bin/Release/net8.0/osu.Game.Rulesets.MyAwesomeRuleset.dll
+    ```
+  </Step>
+  
+  <Step title="Install in osu!">
+    Place the DLL in the osu! installation directory under:
+    ```
+    rulesets/
+    ```
+    
+    Restart osu! to load the ruleset.
+  </Step>
+</Steps>
+
+## Common Pitfalls
+
+<Warning>
+**API Version Mismatch**: Always set `RulesetAPIVersionSupported = CURRENT_RULESET_API_VERSION` and rebuild when updating osu!.
+</Warning>
+
+<Warning>
+**Null Reference Exceptions**: Initialize all required components in constructors. Use nullable annotations to catch potential null issues at compile time.
+</Warning>
+
+<Warning>
+**Performance Issues**: Use object pooling for hit objects, and avoid heavy computations in the draw thread.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hit Objects" icon="circle-dot" href="/development/rulesets/objects">
+    Learn how to define and implement hit objects
+  </Card>
+  
+  <Card title="Mods System" icon="sliders" href="/development/rulesets/mods">
+    Create gameplay modifiers for your ruleset
+  </Card>
+  
+  <Card title="Difficulty Calculation" icon="chart-line" href="/development/rulesets/difficulty">
+    Implement star rating and performance calculation
+  </Card>
+  
+  <Card title="Community Rulesets" icon="users" href="https://github.com/ppy/osu/discussions/13096">
+    Explore examples and share your creation
+  </Card>
+</CardGroup>
